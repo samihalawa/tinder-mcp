@@ -15,9 +15,10 @@ RUN npm ci --only=production
 
 # Copy TypeScript config and source files
 COPY tsconfig.json ./
+COPY tsconfig.build.json ./
 COPY src ./src
 
-# Install dev dependencies for building
+# Install all dependencies (including dev) for building
 RUN npm ci
 
 # Build the TypeScript application
