@@ -1,8 +1,13 @@
 {
-  "name": "tinder-api-mcp-server",
+  "name": "@samihalawa/tinder-mcp-server",
   "version": "1.0.0",
-  "description": "MCP server for Tinder API",
+  "description": "Model Context Protocol server for Tinder API integration - Control and automate Tinder interactions through a standardized MCP interface",
   "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samihalawa/tinder-mcp-server"
+  },
+  "homepage": "https://github.com/samihalawa/tinder-mcp-server#readme",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",

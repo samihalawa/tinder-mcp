@@ -83,7 +83,90 @@ app.use('/mcp/auth', authRoutes);
 app.use('/mcp/user', userRoutes);
 app.use('/mcp/interaction', interactionRoutes);
 
-// MCP server tools endpoint
+// Main MCP endpoint for Smithery
+app.post('/mcp', async (req: Request, res: Response) => {
+  try {
+    // Handle Smithery configuration from query params
+    const configParam = req.query.config as string;
+    if (configParam) {
+      try {
+        const smitheryConfig = JSON.parse(decodeURIComponent(configParam));
+        // Apply Smithery configuration
+        if (smitheryConfig.tinderApiKey) {
+          process.env.TINDER_API_KEY = smitheryConfig.tinderApiKey;
+        }
+        if (smitheryConfig.tokenSecret) {
+          process.env.TOKEN_SECRET = smitheryConfig.tokenSecret;
+        }
+        if (smitheryConfig.environment) {
+          process.env.NODE_ENV = smitheryConfig.environment;
+        }
+        if (smitheryConfig.maxRequestsPerMinute) {
+          process.env.RATE_LIMIT_MAX_REQUESTS = smitheryConfig.maxRequestsPerMinute.toString();
+        }
+        logger.info('Applied Smithery configuration');
+      } catch (e) {
+        logger.error('Failed to parse Smithery config:', e);
+      }
+    }
+
+    const { method, params } = req.body;
+    
+    // Handle different MCP methods
+    if (method === 'tools/list') {
+      const tools = apiGateway.getAvailableTools();
+      res.json({
+        jsonrpc: '2.0',
+        result: { tools },
+        id: req.body.id || null
+      });
+    } else if (method === 'tools/call') {
+      const { name, arguments: args } = params;
+      const result = await apiGateway.executeTool(name, args);
+      res.json({
+        jsonrpc: '2.0',
+        result,
+        id: req.body.id || null
+      });
+    } else if (method === 'resources/list') {
+      const resources = apiGateway.getAvailableResources();
+      res.json({
+        jsonrpc: '2.0',
+        result: { resources },
+        id: req.body.id || null
+      });
+    } else if (method === 'resources/read') {
+      const { uri } = params;
+      const result = await apiGateway.getResource(uri);
+      res.json({
+        jsonrpc: '2.0',
+        result,
+        id: req.body.id || null
+      });
+    } else {
+      res.json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32601,
+          message: 'Method not found'
+        },
+        id: req.body.id || null
+      });
+    }
+  } catch (error) {
+    const err = error as Error;
+    res.json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32603,
+        message: err.message
+      },
+      id: req.body.id || null
+    });
+  }
+});
+
+// Legacy MCP endpoints for backwards compatibility
 app.post('/mcp/tools', async (req: Request, res: Response) => {
   try {
     const { tool, params } = req.body;
@@ -97,7 +180,6 @@ app.post('/mcp/tools', async (req: Request, res: Response) => {
   }
 });
 
-// MCP server resources endpoint
 app.get('/mcp/resources/:resourceId', async (req: Request, res: Response) => {
   try {
     const { resourceId } = req.params;
@@ -111,7 +193,6 @@ app.get('/mcp/resources/:resourceId', async (req: Request, res: Response) => {
   }
 });
 
-// MCP server info endpoint
 app.get('/mcp/info', async (_req: Request, res: Response) => {
   try {
     const tools = apiGateway.getAvailableTools();
@@ -137,10 +218,11 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 // Start the server
-const PORT = config.PORT || 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : config.PORT || 3000;
 app.listen(PORT, () => {
   logger.info(`Tinder API MCP Server running on port ${PORT}`);
   logger.info(`Environment: ${config.NODE_ENV}`);
+  logger.info('MCP endpoint available at /mcp');
 });
 
 // Export app for testing

@@ -99,11 +99,8 @@ const config: AppConfig = {
   
   // Security configuration
   SECURITY: {
-    // CRITICAL SECURITY FIX: Remove default token secret to prevent security vulnerabilities
-    // A missing TOKEN_SECRET will now throw an error during startup
-    TOKEN_SECRET: process.env.TOKEN_SECRET ? process.env.TOKEN_SECRET : (() => {
-      throw new Error('TOKEN_SECRET environment variable is required for security. Please set it in your .env file.');
-    })(),
+    // For Smithery: Use provided TOKEN_SECRET or generate a default one
+    TOKEN_SECRET: process.env.TOKEN_SECRET || 'smithery-default-secret-' + Math.random().toString(36).substring(7),
     TOKEN_EXPIRY: process.env.TOKEN_EXPIRY || '24h',
   },
   

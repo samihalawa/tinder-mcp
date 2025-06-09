@@ -1,137 +1,211 @@
-# Tinder API MCP Server
+# Tinder MCP Server
 
-A Model Context Protocol (MCP) server for the Tinder API, implemented in TypeScript.
+A powerful Model Context Protocol (MCP) server that brings Tinder's API capabilities to AI assistants and automation tools. Built with TypeScript and Express, this server provides a secure, efficient bridge between MCP clients and the Tinder platform.
 
-## Overview
+## What is this?
 
-This MCP server provides a standardized interface for interacting with the Tinder API. It handles authentication, request processing, rate limiting, caching, and error handling, making it easier to build applications that integrate with Tinder.
+This MCP server enables AI assistants (like Claude) and automation tools to interact with Tinder programmatically. Whether you're building a dating assistant, analyzing match patterns, or creating automated workflows, this server provides the infrastructure you need.
 
-## Features
+## Key Features
 
-- **Authentication Management**: Support for SMS and Facebook authentication methods
-- **Request Handling**: Validation, transformation, and forwarding of API requests
-- **Response Processing**: Parsing, validation, and transformation of API responses
-- **Rate Limiting**: Protection against API rate limits
-- **Caching**: Efficient caching of API responses
-- **Error Handling**: Standardized error responses
-- **Security**: Secure token storage and HTTPS communication
+### Core Capabilities
+- **Smart Authentication**: Seamless SMS and Facebook authentication flows with automatic token management
+- **Full API Coverage**: Complete access to Tinder's functionality - profiles, matches, messages, likes, and more
+- **Intelligent Rate Limiting**: Built-in protection against API limits with configurable thresholds
+- **Performance Caching**: Response caching for improved speed and reduced API calls
+- **Enterprise Security**: JWT-based authentication, input sanitization, and HTTPS enforcement
 
-## Architecture
+### MCP Protocol Support
+- **HTTP Transport**: Full support for Smithery's HTTP-based MCP protocol
+- **Tool Discovery**: Dynamic tool registration and discovery
+- **Resource Management**: Efficient handling of API resources
+- **Configuration Flexibility**: Runtime configuration through Smithery interface
 
-The server follows a modular architecture with the following components:
+## Quick Start
 
-- **API Gateway**: Entry point for MCP tools and resources
-- **Authentication Service**: Handles user authentication flows
-- **Request Handler**: Processes and forwards API requests
-- **Rate Limiter**: Manages API rate limits
-- **Cache Manager**: Caches API responses
-- **Error Handler**: Standardizes error responses
+### Deploy on Smithery
 
-## Installation
+The easiest way to use this server is through [Smithery](https://smithery.ai):
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/tinder-api-mcp-server.git
-   cd tinder-api-mcp-server
-   ```
+1. Visit the server page on Smithery
+2. Click "Deploy"
+3. Configure your Tinder API credentials
+4. Start using with any MCP client
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+### Local Development
 
-3. Create a `.env` file based on `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/samihalawa/tinder-mcp-server.git
+cd tinder-mcp-server
 
-4. Edit the `.env` file with your configuration settings.
+# Install dependencies
+npm install
 
-## Development
+# Configure environment
+cp .env.example .env
+# Edit .env with your settings
 
-1. Start the development server:
-   ```bash
-   npm run dev
-   ```
+# Start development server
+npm run dev
+```
 
-2. Build the project:
-   ```bash
-   npm run build
-   ```
+### Docker Deployment
 
-3. Run the production server:
-   ```bash
-   npm start
-   ```
+```bash
+# Build the image
+docker build -t tinder-mcp-server .
 
-4. Run tests:
-   ```bash
-   npm test
-   ```
+# Run the container
+docker run -p 3000:3000 -e TOKEN_SECRET=your-secret tinder-mcp-server
+```
+
+## Available Tools
+
+### Authentication Tools
+- `authenticate_sms` - Start SMS-based authentication flow
+- `authenticate_facebook` - Authenticate using Facebook credentials
+- `verify_captcha` - Handle CAPTCHA challenges
+- `refresh_auth` - Refresh authentication tokens
+
+### Profile Management
+- `get_user_profile` - Retrieve detailed user profiles
+- `update_profile` - Modify your profile information
+- `get_recommendations` - Get potential match suggestions
+- `get_matches` - List all current matches
+
+### Interaction Tools
+- `like_user` - Express interest in a profile
+- `super_like_user` - Send a Super Like
+- `pass_user` - Skip a profile
+- `boost_profile` - Increase profile visibility
+- `send_message` - Send messages to matches
+- `get_messages` - Retrieve conversation history
+
+### System Tools
+- `clear_cache` - Clear cached responses
+- `get_rate_limits` - Check current rate limit status
+- `server_status` - Get server health information
 
 ## API Endpoints
 
-### Authentication
+The server exposes both MCP-compliant endpoints and REST API routes:
 
-- `POST /mcp/auth/sms/send`: Send SMS verification code
-- `POST /mcp/auth/sms/validate`: Validate SMS verification code
-- `POST /mcp/auth/facebook`: Authenticate with Facebook
-- `POST /mcp/auth/captcha`: Verify CAPTCHA
-- `POST /mcp/auth/refresh`: Refresh authentication token
+### MCP Endpoint
+- `POST /mcp` - Main MCP protocol endpoint (Smithery compatible)
 
-### User
+### REST Endpoints
+- Authentication: `/mcp/auth/*`
+- User operations: `/mcp/user/*`
+- Interactions: `/mcp/interaction/*`
+- System info: `/mcp/info`
 
-- `GET /mcp/user/:userId`: Get user profile
-- `GET /mcp/user/recommendations`: Get user recommendations
-- `PUT /mcp/user/profile`: Update user profile
-- `GET /mcp/user/matches`: Get user matches
+## Configuration
 
-### Interaction
+Configure the server through environment variables or Smithery's UI:
 
-- `POST /mcp/interaction/like/:targetUserId`: Like a user
-- `POST /mcp/interaction/superlike/:targetUserId`: Super like a user
-- `POST /mcp/interaction/pass/:targetUserId`: Pass on a user
-- `POST /mcp/interaction/boost`: Boost profile
-- `POST /mcp/interaction/message/:matchId`: Send message
-- `GET /mcp/interaction/messages/:matchId`: Get messages for a match
+```env
+# Server Configuration
+PORT=3000
+NODE_ENV=production
 
-### MCP Tools and Resources
+# Security
+TOKEN_SECRET=your-secret-key
+TOKEN_EXPIRY=24h
 
-- `POST /mcp/tools`: Execute MCP tool
-- `GET /mcp/resources/:resourceId`: Access MCP resource
-- `GET /mcp/info`: Get server information
+# Tinder API
+TINDER_API_KEY=your-api-key
+TINDER_API_BASE_URL=https://api.gotinder.com
 
-## MCP Tools
+# Performance
+CACHE_TTL=300
+RATE_LIMIT_MAX_REQUESTS=100
+```
 
-The server provides the following MCP tools:
+## Architecture
 
-- `authenticate_sms`: Authenticate user with SMS
-- `authenticate_facebook`: Authenticate user with Facebook
-- `verify_captcha`: Verify CAPTCHA response
-- `like_user`: Like a user profile
-- `super_like_user`: Super like a user profile
-- `pass_user`: Pass on a user profile
-- `boost_profile`: Boost user profile visibility
-- `get_user_profile`: Get user profile information
-- `get_recommendations`: Get potential matches
-- `clear_cache`: Clear cache
-- `get_rate_limits`: Get rate limit information
+The server is built with a modular, scalable architecture:
 
-## MCP Resources
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│ MCP Client  │────▶│  API Gateway │────▶│ Tinder API  │
+└─────────────┘     └──────────────┘     └─────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │             │
+              ┌─────▼────┐  ┌────▼─────┐
+              │  Cache   │  │   Rate   │
+              │ Manager  │  │  Limiter │
+              └──────────┘  └──────────┘
+```
 
-The server provides the following MCP resources:
+### Core Components
+- **API Gateway**: Central request router and MCP protocol handler
+- **Authentication Service**: Manages all auth flows and token lifecycle
+- **Request Handler**: Validates, transforms, and forwards API requests
+- **Cache Manager**: In-memory caching with configurable TTL
+- **Rate Limiter**: User and global rate limiting protection
+- **Error Handler**: Standardized error responses and logging
 
-- `api-docs`: API documentation
-- `server-status`: Server status information
+## Development
 
-## Security Considerations
+### Running Tests
+```bash
+# Run all tests
+npm test
 
-- Never hardcode secrets or API keys
-- Use environment variables for sensitive information
-- Implement proper authentication for all endpoints
-- Use HTTPS for all communications
-- Sanitize input and output data
+# Run with coverage
+npm test -- --coverage
+
+# Run specific test suite
+npm test -- --testPathPattern=integration
+```
+
+### Code Quality
+```bash
+# Lint code
+npm run lint
+
+# Format code
+npm run format
+```
+
+### Building
+```bash
+# Build TypeScript
+npm run build
+
+# Start production server
+npm start
+```
+
+## Security Best Practices
+
+- All sensitive data is stored in environment variables
+- JWT tokens for secure session management
+- Input validation and sanitization on all endpoints
+- HTTPS enforcement in production
+- Rate limiting to prevent abuse
+- Comprehensive error handling without exposing internals
+
+## Contributing
+
+Contributions are welcome! Please ensure:
+- All tests pass
+- Code follows the existing style
+- New features include tests
+- Documentation is updated
 
 ## License
 
-MIT
+MIT License - see LICENSE file for details
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/samihalawa/tinder-mcp-server/issues)
+- **Documentation**: [MCP Protocol Docs](https://modelcontextprotocol.io)
+- **Smithery**: [Deploy on Smithery](https://smithery.ai)
+
+---
+
+Built with TypeScript, Express, and the Model Context Protocol
