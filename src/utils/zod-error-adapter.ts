@@ -5,7 +5,7 @@
  * Provides utilities for formatting and handling Zod errors.
  */
 
-import { z } from 'zod';
+import { ZodIssueCode, ZodError, ZodIssue } from 'zod';
 import { ApiError } from './error-handler';
 import { ErrorCodes } from '../types';
 import logger from './logger';
@@ -42,21 +42,20 @@ export const DEFAULT_SENSITIVE_FIELDS = [
 export interface FormattedValidationError {
   path: (string | number)[];
   message: string;
-  code: z.ZodIssueCode;
+  code: typeof ZodIssueCode[keyof typeof ZodIssueCode];
   details?: Record<string, any>;
 }
 
 /**
  * Zod Error Adapter class
+ * 
+ * Converts Zod validation errors into standardized API errors
+ * with sanitized messages and proper formatting.
  */
 export class ZodErrorAdapter {
+  
   /**
-   * Convert a Zod error to an API error
-   * 
-   * @param error - Zod error
-   * @param message - Optional custom message
-   * @param statusCode - HTTP status code (default: 400)
-   * @returns API error
+   * Add sensitive field names to the sanitization list
    */
   /**
    * Convert a Zod error to an API error with sanitized messages
@@ -68,7 +67,7 @@ export class ZodErrorAdapter {
    * @returns API error
    */
   public static toApiError(
-    error: z.ZodError,
+    error: ZodError,
     message: string = 'Validation failed',
     statusCode: number = 400,
     options: ErrorFormatOptions = {}
@@ -80,195 +79,168 @@ export class ZodErrorAdapter {
       ...options
     };
     
-    const formattedErrors = this.formatZodError(error, mergedOptions);
-    
-    return new ApiError(
-      ErrorCodes.VALIDATION_ERROR,
-      message,
-      { validationErrors: formattedErrors },
-      statusCode
-    );
+    try {
+      const errors = this.formatZodError(error, mergedOptions);
+      const errorMessage = options.includePathInMessage 
+        ? this.createErrorMessage(error)
+        : message;
+      
+      // Log the validation error for debugging (with sanitized data)
+      logger.debug('Validation error', {
+        message: errorMessage,
+        errors: errors,
+        code: ErrorCodes.VALIDATION_ERROR
+      });
+      
+      return new ApiError(ErrorCodes.VALIDATION_ERROR, errorMessage, { errors }, statusCode);
+    } catch (err) {
+      logger.error('Error formatting Zod error', err);
+      return new ApiError(ErrorCodes.VALIDATION_ERROR, message, null, statusCode);
+    }
   }
 
   /**
-   * Format a Zod error into a structured object
+   * Format a Zod error into a structured format with sanitized messages
    * 
    * @param error - Zod error
-   * @param options - Format options
-   * @returns Formatted validation errors
-   */
-  /**
-   * Format a Zod error into a structured object with sanitized messages
-   *
-   * @param error - Zod error
-   * @param options - Format options
+   * @param options - Error format options
    * @returns Formatted validation errors
    */
   public static formatZodError(
-    error: z.ZodError,
+    error: ZodError,
     options: ErrorFormatOptions = {}
   ): FormattedValidationError[] {
     // Set default options
     const {
       includePathInMessage = true,
-      flattenErrors = true,
       sanitizeSensitiveFields = true,
       sensitiveFields = DEFAULT_SENSITIVE_FIELDS
     } = options;
     
     try {
-      return error.errors.map(issue => {
+      return error.issues.map((issue: any) => {
         const path = issue.path;
         const pathString = path.join('.');
         
         // Check if this is a sensitive field
-        const isSensitiveField = sanitizeSensitiveFields &&
-          this.isSensitivePath(path, sensitiveFields);
+        const isSensitiveField = sensitiveFields.some(field => 
+          path.some((p: any) => String(p).toLowerCase().includes(field.toLowerCase()))
+        );
         
-        // Sanitize message if it's a sensitive field
+        // Sanitize the message if it's a sensitive field
         let message = issue.message;
-        if (isSensitiveField) {
-          message = this.sanitizeErrorMessage(message);
+        if (sanitizeSensitiveFields && isSensitiveField) {
+          // Replace specific values in the message with generic text
+          message = this.sanitizeErrorMessage(message, pathString);
         }
         
-        if (includePathInMessage && pathString) {
+        // Include path in message if requested
+        if (includePathInMessage && path.length > 0) {
           message = `${pathString}: ${message}`;
         }
         
-        return {
-          path: path,
-          message: message,
+        const formatted: FormattedValidationError = {
+          path,
+          message,
           code: issue.code,
-          // Sanitize details for sensitive fields
-          details: isSensitiveField ? undefined : this.getIssueDetails(issue)
+          details: this.extractIssueDetails(issue)
         };
+        
+        return formatted;
       });
     } catch (err) {
-      logger.error('Error formatting Zod error:', err);
+      logger.error('Error formatting Zod errors', err);
+      // Return a simple fallback format
       return [{
         path: [],
-        message: 'Error processing validation errors',
-        code: z.ZodIssueCode.custom
+        message: error.message || 'Validation failed',
+        code: ZodIssueCode.custom,
+        details: {}
       }];
     }
   }
-
+  
   /**
-   * Get detailed information from a Zod issue
+   * Sanitize error messages for sensitive fields
    * 
-   * @param issue - Zod issue
-   * @returns Issue details
-   */
-  /**
-   * Check if a path contains sensitive information
-   *
-   * @param path - Path to check
-   * @param sensitiveFields - List of sensitive field names
-   * @returns True if the path contains sensitive information
-   */
-  private static isSensitivePath(path: (string | number)[], sensitiveFields: string[]): boolean {
-    if (!path || path.length === 0) return false;
-    
-    // Convert path to string for easier checking
-    const pathString = path.join('.').toLowerCase();
-    
-    // Check if any sensitive field name is in the path
-    return sensitiveFields.some(field =>
-      pathString.includes(field.toLowerCase())
-    );
-  }
-  
-  /**
-   * Sanitize error message for sensitive fields
-   *
    * @param message - Original error message
-   * @returns Sanitized error message
+   * @param fieldName - Name of the field
+   * @returns Sanitized message
    */
-  private static sanitizeErrorMessage(message: string): string {
-    // Replace specific values with generic message
-    return 'Invalid value provided for sensitive field';
-  }
-  
-  /**
-   * Perform constant-time comparison of strings
-   * Helps prevent timing attacks when comparing sensitive values
-   *
-   * @param a - First string
-   * @param b - Second string
-   * @returns True if strings are equal
-   */
-  public static constantTimeCompare(a: string, b: string): boolean {
-    // If lengths are different, strings are not equal
-    // But still perform the comparison to maintain constant time
-    const result = a.length === b.length;
+  private static sanitizeErrorMessage(message: string, fieldName: string): string {
+    // Common patterns to sanitize
+    const patterns = [
+      // Remove specific values from messages
+      /Expected .+, received .+/gi,
+      /String must contain at least \d+ character\(s\)/gi,
+      /String must contain at most \d+ character\(s\)/gi,
+      /Invalid .+ format/gi,
+      /Does not match pattern .+/gi,
+    ];
     
-    // Calculate maximum length to compare
-    const len = Math.max(a.length, b.length);
+    let sanitized = message;
     
-    // Perform constant-time comparison
-    let diff = 0;
-    for (let i = 0; i < len; i++) {
-      // XOR the character codes (will be 0 if equal)
-      diff |= (a.charCodeAt(i % a.length) ^ b.charCodeAt(i % b.length));
+    // Apply pattern-based sanitization
+    patterns.forEach(pattern => {
+      if (pattern.test(sanitized)) {
+        sanitized = `Invalid ${fieldName}`;
+      }
+    });
+    
+    // If no patterns matched, use a generic message
+    if (sanitized === message && fieldName) {
+      sanitized = `Invalid ${fieldName} format`;
     }
     
-    // Return true only if lengths match and all characters match
-    return result && diff === 0;
+    return sanitized;
   }
   
-  private static getIssueDetails(issue: z.ZodIssue): Record<string, any> | undefined {
+  /**
+   * Extract additional details from a Zod issue
+   * 
+   * @param issue - Zod issue
+   * @returns Additional details or undefined
+   */
+  private static extractIssueDetails(issue: ZodIssue): Record<string, any> | undefined {
     const details: Record<string, any> = {};
     
     switch (issue.code) {
-      case z.ZodIssueCode.invalid_type:
-        details.expectedType = issue.expected;
-        details.receivedType = issue.received;
+      case ZodIssueCode.invalid_type:
+        if ('expected' in issue) details.expectedType = (issue as any).expected;
+        if ('input' in issue) details.receivedType = typeof (issue as any).input;
         break;
         
-      case z.ZodIssueCode.invalid_literal:
-        details.expected = issue.expected;
+      case ZodIssueCode.invalid_value:
+        if ('expected' in issue) details.expected = (issue as any).expected;
+        if ('options' in issue) details.options = (issue as any).options;
+        if ('received' in issue) details.received = (issue as any).received;
         break;
         
-      case z.ZodIssueCode.unrecognized_keys:
-        details.keys = issue.keys;
+      case ZodIssueCode.unrecognized_keys:
+        if ('keys' in issue) details.keys = (issue as any).keys;
         break;
         
-      case z.ZodIssueCode.invalid_union:
-        details.unionErrors = issue.unionErrors.map(e => 
-          this.formatZodError(e)
-        );
-        break;
-        
-      case z.ZodIssueCode.invalid_enum_value:
-        details.options = issue.options;
-        details.received = issue.received;
-        break;
-        
-      case z.ZodIssueCode.invalid_arguments:
-        if ('argumentsError' in issue && issue.argumentsError) {
-          details.argumentsError = this.formatZodError(issue.argumentsError);
-        }
-        break;
-
-      case z.ZodIssueCode.invalid_return_type:
-        if ('returnTypeError' in issue && issue.returnTypeError) {
-          details.returnTypeError = this.formatZodError(issue.returnTypeError);
+      case ZodIssueCode.invalid_union:
+        if ('errors' in issue) {
+          details.unionErrors = (issue as any).errors.map((e: any) => 
+            this.formatZodError(e)
+          );
         }
         break;
         
-      case z.ZodIssueCode.too_small:
+      case ZodIssueCode.too_small:
         if ('minimum' in issue) {
           details.minimum = issue.minimum;
-          details.type = issue.type;
+          if ('type' in issue) details.type = (issue as any).type;
           details.inclusive = issue.inclusive;
           if ('exact' in issue) details.exact = issue.exact;
         }
         break;
         
-      case z.ZodIssueCode.too_big:
+      case ZodIssueCode.too_big:
         if ('maximum' in issue) {
           details.maximum = issue.maximum;
-          details.type = issue.type;
+          if ('type' in issue) details.type = (issue as any).type;
           details.inclusive = issue.inclusive;
           if ('exact' in issue) details.exact = issue.exact;
         }
@@ -292,9 +264,9 @@ export class ZodErrorAdapter {
    * @param error - Zod error
    * @returns Simple error message
    */
-  public static createErrorMessage(error: z.ZodError): string {
-    return error.errors
-      .map(err => {
+  public static createErrorMessage(error: ZodError): string {
+    return error.issues
+      .map((err: any) => {
         const path = err.path.join('.');
         const prefix = path ? `${path}: ` : '';
         return `${prefix}${err.message}`;

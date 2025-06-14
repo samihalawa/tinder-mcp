@@ -134,8 +134,8 @@ router.get('/matches', async (req: Request, res: Response) => {
       endpoint: '/v2/matches',
       userId: authUserId,
       params: {
-        count: req.query.count || 60,
-        message: req.query.message || 1
+        count: Number(req.query.count) || 60,
+        message: Number(req.query.message) || 1
       }
     });
     

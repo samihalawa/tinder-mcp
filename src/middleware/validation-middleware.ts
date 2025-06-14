@@ -489,7 +489,7 @@ export function validateRequest(
         return next();
       }
       
-      middlewares[index](req, res, (err: Error | null) => {
+      middlewares[index](req, res, (err: any) => {
         if (err) {
           return next(err);
         }
