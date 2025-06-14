@@ -30,8 +30,8 @@ RUN npm prune --production
 # Remove source files after build
 RUN rm -rf src
 
-# Expose the port (Smithery will set PORT env var)
-EXPOSE 3000
+# Set environment
+ENV NODE_ENV=production
 
-# Start the server
+# Start the MCP server with stdio transport
 CMD ["node", "dist/index.js"]
