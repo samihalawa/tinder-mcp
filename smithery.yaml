@@ -1,55 +1,52 @@
 version: 1
-runtime: container
 startCommand:
   type: stdio
-build:
-  dockerfile: "Dockerfile"
-  dockerBuildPath: "."
-healthCheck:
-  timeout: 30
-  interval: 10
-  retries: 3
-  startPeriod: 60
-configSchema:
-  type: object
-  properties:
-    tinderApiKey:
-      type: string
-      description: "Your Tinder API authentication token"
-      default: ""
-    tokenSecret:
-      type: string
-      description: "Secret key for JWT token generation (optional - uses default if not provided)"
-      default: ""
-    cacheEnabled:
-      type: boolean
-      description: "Enable response caching for better performance"
-      default: true
-    rateLimitEnabled:
-      type: boolean
-      description: "Enable rate limiting to prevent API abuse"
-      default: true
-    maxRequestsPerMinute:
-      type: number
-      description: "Maximum requests allowed per minute per user"
-      default: 30
-      minimum: 1
-      maximum: 100
-    environment:
-      type: string
-      description: "Server environment (development/production)"
-      default: "production"
-      enum: ["development", "production"]
-    debug:
-      type: boolean
-      description: "Enable debug logging"
-      default: false
-  required: []
-exampleConfig:
-  tinderApiKey: ""
-  tokenSecret: ""
-  cacheEnabled: true
-  rateLimitEnabled: true
-  maxRequestsPerMinute: 30
-  environment: "production"
-  debug: false
+  configSchema:
+    type: object
+    required: []
+    properties:
+      tinderApiKey:
+        type: string
+        description: "Your Tinder API authentication token"
+        default: ""
+      tokenSecret:
+        type: string
+        description: "Secret key for JWT token generation (optional - uses default if not provided)"
+        default: ""
+      cacheEnabled:
+        type: boolean
+        description: "Enable response caching for better performance"
+        default: true
+      rateLimitEnabled:
+        type: boolean
+        description: "Enable rate limiting to prevent API abuse"
+        default: true
+      maxRequestsPerMinute:
+        type: number
+        description: "Maximum requests allowed per minute per user"
+        default: 30
+        minimum: 1
+        maximum: 100
+      environment:
+        type: string
+        description: "Server environment (development/production)"
+        default: "production"
+        enum: ["development", "production"]
+      debug:
+        type: boolean
+        description: "Enable debug logging"
+        default: false
+  commandFunction: |-
+    (config) => ({ 
+      command: 'node', 
+      args: ['dist/index.js'], 
+      env: { 
+        TINDER_API_KEY: config.tinderApiKey || '',
+        TOKEN_SECRET: config.tokenSecret || '',
+        CACHE_ENABLED: config.cacheEnabled ? 'true' : 'false',
+        RATE_LIMIT_ENABLED: config.rateLimitEnabled ? 'true' : 'false',
+        MAX_REQUESTS_PER_MINUTE: config.maxRequestsPerMinute?.toString() || '30',
+        NODE_ENV: config.environment || 'production',
+        DEBUG: config.debug ? 'true' : 'false'
+      } 
+    })
