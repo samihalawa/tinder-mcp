@@ -1,42 +1,55 @@
-# Smithery configuration file for Tinder MCP Server
-# https://smithery.ai/docs/build/project-config/smithery.yaml
-
+version: 1
+runtime: container
 startCommand:
-  type: http
-  configSchema:
-    type: object
-    required: 
-      - tinderApiKey
-    properties:
-      tinderApiKey:
-        type: string
-        title: "Tinder API Key"
-        description: "Your Tinder API authentication token"
-      tokenSecret:
-        type: string 
-        title: "JWT Token Secret"
-        description: "Secret key for JWT token generation (optional - uses default if not provided)"
-        default: ""
-      cacheEnabled:
-        type: boolean
-        title: "Enable Cache"
-        description: "Enable response caching for better performance"
-        default: true
-      rateLimitEnabled:
-        type: boolean
-        title: "Enable Rate Limiting"
-        description: "Enable rate limiting to prevent API abuse"
-        default: true
-      maxRequestsPerMinute:
-        type: number
-        title: "Max Requests Per Minute"
-        description: "Maximum requests allowed per minute per user"
-        default: 30
-        minimum: 1
-        maximum: 100
-      environment:
-        type: string
-        title: "Environment"
-        description: "Server environment (development/production)"
-        default: "production"
-        enum: ["development", "production"]
+  type: stdio
+build:
+  dockerfile: "Dockerfile"
+  dockerBuildPath: "."
+healthCheck:
+  timeout: 30
+  interval: 10
+  retries: 3
+  startPeriod: 60
+configSchema:
+  type: object
+  properties:
+    tinderApiKey:
+      type: string
+      description: "Your Tinder API authentication token"
+      default: ""
+    tokenSecret:
+      type: string
+      description: "Secret key for JWT token generation (optional - uses default if not provided)"
+      default: ""
+    cacheEnabled:
+      type: boolean
+      description: "Enable response caching for better performance"
+      default: true
+    rateLimitEnabled:
+      type: boolean
+      description: "Enable rate limiting to prevent API abuse"
+      default: true
+    maxRequestsPerMinute:
+      type: number
+      description: "Maximum requests allowed per minute per user"
+      default: 30
+      minimum: 1
+      maximum: 100
+    environment:
+      type: string
+      description: "Server environment (development/production)"
+      default: "production"
+      enum: ["development", "production"]
+    debug:
+      type: boolean
+      description: "Enable debug logging"
+      default: false
+  required: []
+exampleConfig:
+  tinderApiKey: ""
+  tokenSecret: ""
+  cacheEnabled: true
+  rateLimitEnabled: true
+  maxRequestsPerMinute: 30
+  environment: "production"
+  debug: false
