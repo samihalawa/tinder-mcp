@@ -15,7 +15,7 @@
     "test": "jest",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "install-zod": "npm install zod@4.0.0-beta.1"
+    "install-zod": "npm install zod@^3.22.4"
   },
   "keywords": [
     "tinder",
@@ -26,6 +26,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.4.1",
     "axios": "^1.6.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
@@ -35,7 +36,7 @@
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
     "winston": "^3.11.0",
-    "zod": "^4.0.0-beta.1"
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
