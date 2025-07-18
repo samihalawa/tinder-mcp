@@ -1,0 +1,168 @@
+{
+  "name": "tinder-automation",
+  "version": "1.0.0",
+  "description": "Comprehensive Tinder automation tool with full MCP support",
+  "author": "Sami Halawa",
+  "license": "MIT",
+  "mcp": {
+    "command": "node",
+    "args": ["dist/index.js"],
+    "env": {
+      "HEADLESS": "true",
+      "STABILITY_WAIT": "5000",
+      "DEFAULT_TIMEOUT": "30000"
+    }
+  },
+  "capabilities": [
+    "authentication",
+    "profile-management",
+    "discovery",
+    "messaging",
+    "settings",
+    "automation"
+  ],
+  "tags": [
+    "tinder",
+    "dating",
+    "automation",
+    "browser-automation",
+    "social",
+    "messaging"
+  ],
+  "requirements": {
+    "node": ">=18.0.0",
+    "memory": "512MB",
+    "disk": "100MB"
+  },
+  "features": {
+    "authentication": {
+      "description": "Phone and Apple ID login with OTP support",
+      "tools": [
+        "tinder_login_phone",
+        "tinder_submit_otp",
+        "tinder_login_apple_id",
+        "tinder_check_login_status",
+        "tinder_logout"
+      ]
+    },
+    "profile": {
+      "description": "Complete profile management and setup",
+      "tools": [
+        "tinder_setup_profile",
+        "tinder_get_profile"
+      ]
+    },
+    "discovery": {
+      "description": "Swiping, discovery, and boost features",
+      "tools": [
+        "tinder_swipe",
+        "tinder_auto_swipe",
+        "tinder_use_boost",
+        "tinder_view_profile",
+        "tinder_rewind"
+      ]
+    },
+    "messaging": {
+      "description": "Match management and messaging",
+      "tools": [
+        "tinder_get_matches",
+        "tinder_send_message",
+        "tinder_send_emoji",
+        "tinder_share_contact",
+        "tinder_get_conversation",
+        "tinder_unmatch"
+      ]
+    },
+    "settings": {
+      "description": "Preference and settings management",
+      "tools": [
+        "tinder_update_settings",
+        "tinder_get_settings",
+        "tinder_reset_settings"
+      ]
+    }
+  },
+  "examples": [
+    {
+      "name": "Basic Login and Profile Setup",
+      "description": "Login to Tinder and setup a complete profile",
+      "steps": [
+        {
+          "tool": "tinder_login_phone",
+          "params": {
+            "phoneNumber": "680821181",
+            "countryCode": "34"
+          }
+        },
+        {
+          "tool": "tinder_submit_otp",
+          "params": {
+            "otpCode": "123456"
+          }
+        },
+        {
+          "tool": "tinder_setup_profile",
+          "params": {
+            "bio": "Looking for meaningful connections",
+            "interests": ["Travel", "Photography", "Cooking"],
+            "languages": ["Spanish", "English"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Automated Swiping Strategy",
+      "description": "Perform strategic auto-swiping with custom ratios",
+      "steps": [
+        {
+          "tool": "tinder_auto_swipe",
+          "params": {
+            "count": 50,
+            "likeRatio": 0.7,
+            "useSuperLikes": true,
+            "superLikeRatio": 0.1,
+            "delayBetweenSwipes": 4000
+          }
+        }
+      ]
+    },
+    {
+      "name": "Match Management and Messaging",
+      "description": "Get matches and send personalized messages",
+      "steps": [
+        {
+          "tool": "tinder_get_matches",
+          "params": {}
+        },
+        {
+          "tool": "tinder_send_message",
+          "params": {
+            "matchName": "Aithana",
+            "message": "Hi! How's your day going?"
+          }
+        },
+        {
+          "tool": "tinder_share_contact",
+          "params": {
+            "matchName": "Aithana",
+            "contactInfo": {
+              "phoneNumber": "679794037",
+              "countryCode": "34",
+              "type": "whatsapp"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "documentation": {
+    "readme": "README.md",
+    "examples": "examples/",
+    "api": "docs/api.md"
+  },
+  "support": {
+    "issues": "https://github.com/samihalawa/tinder-mcp/issues",
+    "discussions": "https://github.com/samihalawa/tinder-mcp/discussions",
+    "email": "support@tinder-mcp.com"
+  }
+}

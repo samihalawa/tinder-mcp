@@ -1,76 +1,66 @@
-# Node.js dependencies
+# Dependencies
 node_modules/
-
-# TypeScript build output
-dist/
-build/
-*.tsbuildinfo
-
-# Environment variables
-.env
-.env.local
-.env.development
-.env.test
-.env.production
-
-# Logs
-logs/
-*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# IDE and editor files
-.idea/
+# Build output
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Data and session files
+data/
+cookies/
+sessions/
+*.cookies
+*.session
+
+# Screenshots and logs
+screenshots/
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
 .vscode/
+.idea/
 *.swp
 *.swo
-.DS_Store
-.project
-.classpath
-.settings/
-*.sublime-workspace
-*.sublime-project
+*~
 
-# Testing
+# Test coverage
 coverage/
 .nyc_output/
-integration-test-config.js
 
 # Temporary files
 tmp/
 temp/
-.tmp/
+*.tmp
+*.temp
 
-# Cache
-.npm/
-.eslintcache
+# Browser automation files
+playwright-report/
+test-results/
+
+# Backup files
+*.backup
+*.bak
+
+# Cache directories
 .cache/
-
-# Build artifacts
-*.tgz
-.yarn-integrity
-
-# Debug files
-.node_repl_history
-
-# Scripts
-*.sh
-run-*.js
-build-*.js
-test-*.js
-
-# Documentation and reports
-*-summary.md
-*-report.md
-*-specification.md
-*-review.md
-integration-testing-README.md
-
-# Embedded git repositories
-tinder-api-documentation/
-
-# Misc
-.DS_Store
-Thumbs.db
-.roomodes
+.parcel-cache/
