@@ -10,7 +10,7 @@ import {
 import { z } from 'zod';
 
 // Import tool classes
-import { AuthTools, LoginWithPhoneSchema, SubmitOTPSchema, LoginWithAppleIdSchema } from './tools/auth.js';
+import { AuthTools, LoginWithPhoneSchema, SubmitOTPSchema, LoginWithAppleIdSchema, LoginWithCookiesSchema } from './tools/auth.js';
 import { ProfileTools, ProfileSetupSchema } from './tools/profile.js';
 import { DiscoveryTools, SwipeSchema, AutoSwipeSchema, ViewProfileSchema } from './tools/discovery.js';
 import { MessagingTools, SendMessageSchema, SendEmojiSchema, ShareContactSchema, GetConversationSchema, UnmatchSchema } from './tools/messaging.js';
@@ -68,6 +68,8 @@ class TinderMCPServer {
             return await this.handleSubmitOTP(args);
           case 'tinder_login_apple_id':
             return await this.handleLoginAppleId(args);
+          case 'tinder_login_cookies':
+            return await this.handleLoginCookies(args);
           case 'tinder_check_login_status':
             return await this.handleCheckLoginStatus();
           case 'tinder_logout':
@@ -187,6 +189,20 @@ class TinderMCPServer {
             },
           },
           required: ['email', 'password'],
+        },
+      },
+      {
+        name: 'tinder_login_cookies',
+        description: 'Login to Tinder using saved cookies from browser session',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            cookies: {
+              type: 'string',
+              description: 'JSON string of cookies array from browser (export from DevTools)',
+            },
+          },
+          required: ['cookies'],
         },
       },
       {
@@ -578,6 +594,12 @@ class TinderMCPServer {
   private async handleLoginAppleId(args: any) {
     const validated = LoginWithAppleIdSchema.parse(args);
     const result = await this.authTools.loginWithAppleId(validated);
+    return this.formatToolResult(result);
+  }
+
+  private async handleLoginCookies(args: any) {
+    const validated = LoginWithCookiesSchema.parse(args);
+    const result = await this.authTools.loginWithCookies(validated.cookies);
     return this.formatToolResult(result);
   }
 

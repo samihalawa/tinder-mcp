@@ -12,9 +12,21 @@ export class TinderSelectors {
     OTP_CONTAINER: 'div.D\\(f\\) > div:nth-of-type(1) input',
     APPLE_ID_EMAIL: '#account_name_text_field',
     APPLE_ID_PASSWORD: '#password_text_field',
-    APPLE_ID_CONTINUE: '#sign-in',
+    APPLE_ID_CONTINUE: '#sign-in, #continue-password',
     APPLE_ID_2FA: 'input[aria-label*="位数"]',
     TRUST_BROWSER: 'button:has-text("Trust"), button:has-text("信任")',
+    // From recordings
+    MAIN_LOGIN: 'span.P\\(0\\)',
+    LANGUAGE_SELECT: '#o787701392 li:nth-of-type(1) span:nth-of-type(1)',
+    LOGIN_WITH_PHONE: 'div:nth-of-type(3) div.lxn9zzn > div > div',
+    COUNTRY_DROPDOWN: 'div.Bdrsbstart\\(0\\)\\!',
+    COUNTRY_SEARCH_INPUT: 'input',
+    SPAIN_OPTION: 'div.H\\(255px\\)--ml button',
+    PHONE_NUMBER_INPUT: '#phone_number',
+    CONTINUE_BUTTON: '#o787701392 > div > div > div.Ta\\(c\\) > div',
+    APPLE_LOGIN: '#o787701392 div.c9iqosj',
+    OTP_DIGITS: (i: number) => `#content input:nth-of-type(${i})`,
+    OTP_SUBMIT: 'button:nth-of-type(2)',
   };
 
   // Profile management selectors
@@ -33,6 +45,20 @@ export class TinderSelectors {
     SAVE_BUTTON: 'button:has-text("Save"), button:has-text("保存")',
     DONE_BUTTON: 'button:has-text("Done"), button:has-text("完成")',
     PREVIEW_BUTTON: 'button:has-text("Preview"), button:has-text("预览")',
+    // From recordings - profile setup flow
+    ALLOW_LOCATION: '[data-testid="allow"] div.c9iqosj',
+    DECLINE_LOCATION: '[data-testid="decline"] div.c9iqosj > div',
+    SKIP_BUTTON: 'div.W\\(a\\) > div:nth-of-type(2) div.c9iqosj',
+    PROFILE_CARD: 'div.Wc\\(\\$transform\\) section div:nth-of-type(1) > div',
+    PROFILE_EDIT: '#\\:rd\\: > div:nth-of-type(2) > div',
+    INTERESTS_SECTION: '#section-de_9 > div:nth-of-type(5), #section-de_33 > div:nth-of-type(5)',
+    BIO_TEXTAREA: '#o-1778884828 textarea',
+    PHOTO_UPLOAD_INPUT: '[data-testid="file-upload"]',
+    PHOTO_DESCRIPTION: '[data-testid="textbox"]',
+    SAVE_PROFILE: 'button.Typs\\(button-2\\)',
+    PREVIEW_PROFILE: 'div.c9iqosj span',
+    CAROUSEL_ITEM: '#carousel-item-0 > div',
+    NEXT_STEP: 'div.c9iqosj span',
   };
 
   // Discovery and swiping selectors
@@ -48,6 +74,20 @@ export class TinderSelectors {
     PROFILE_INFO: 'div.StretchedBox > div, div[data-testid="profile-info"]',
     MATCH_MODAL: 'div[data-testid="match-modal"], div:has-text("It\'s a Match")',
     CLOSE_MODAL: 'button[aria-label*="Close"], svg[aria-label*="关闭"]',
+    // From recordings - detailed swiping actions
+    LIKE_BUTTON_PATH: 'div:nth-of-type(4) span.gamepad-icon-wrapper path',
+    PASS_BUTTON_PATH: 'div:nth-of-type(2) span.gamepad-icon-wrapper path',
+    SUPER_LIKE_PATH: 'div:nth-of-type(3) span.gamepad-icon-wrapper path',
+    LIKE_SVG: 'div:nth-of-type(4) span.gamepad-icon-wrapper > svg',
+    PASS_SVG: 'div:nth-of-type(2) span.gamepad-icon-wrapper > svg',
+    PROFILE_CARD_MAIN: 'div.Wc\\(\\$transform\\) section div:nth-of-type(1) > div',
+    PHOTO_NAVIGATION_NEXT: 'div.Wc\\(\\$transform\\) button.End\\(0\\) > svg',
+    PHOTO_NAVIGATION_PREV: 'button.Start\\(0\\) > svg',
+    MATCH_NOTIFICATION: 'div.notificationManager h3',
+    MATCH_CLOSE: 'button.My\\(12px\\) div.c9iqosj',
+    DISCOVERY_TAB_NAV: 'nav.D\\(f\\) > div > a',
+    BOOST_BUTTON_MAIN: 'button.C\\(\\$c-ds-icon-trust\\)\\:h path',
+    MODAL_CLOSE: '#o787701392 > div',
   };
 
   // Messaging selectors
@@ -63,6 +103,21 @@ export class TinderSelectors {
     CONTACT_SHARE: 'div:has-text("WhatsApp"), div:has-text("分享我的whatsapp")',
     PHONE_INPUT_MODAL: '#contact-card-input',
     COUNTRY_CODE_MODAL: 'button:has-text("+34"), button:has-text("Spain")',
+    // From recordings - detailed messaging flow
+    MESSAGES_TAB_MAIN: '#o775463182',
+    MATCHES_TAB_MAIN: '#o609274768',
+    MATCH_PROFILE: 'ul div > div.Pos\\(r\\) > div',
+    MATCH_LIKE_BUTTON: 'button:nth-of-type(1) span > div',
+    MESSAGE_INPUT_MAIN: '#o1224954181',
+    SEND_BUTTON_MAIN: '#main-content button.button > span',
+    PROFILE_PHOTOS: '#carousel-item-0 > div, #carousel-item-1 > div, #carousel-item-2 > div',
+    CONTACT_SHARE_MODAL: 'div.BdT > div > div:nth-of-type(1) path:nth-of-type(2)',
+    PHOTO_CAROUSEL: (index: number) => `#carousel-item-${index} > div`,
+    CONTACT_MODAL_OPEN: 'div:nth-of-type(10) > div > div',
+    CONTACT_MODAL_COUNTRY: '#o787701392 > div > div div.Ta\\(c\\)',
+    CONTACT_MODAL_INPUT: 'input',
+    CONTACT_MODAL_SUBMIT: '#o787701392 button:nth-of-type(2)',
+    CONTACT_CARD_INPUT: '#contact-card-input',
   };
 
   // Settings selectors
