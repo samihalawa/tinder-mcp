@@ -1,56 +1,78 @@
 version: 1
-runtime: container
 startCommand:
-  type: http
-build:
-  dockerfile: "Dockerfile"
-  dockerBuildPath: "."
-configSchema:
-  type: object
-  properties:
-    tinderCookies:
-      type: string
-      description: "JSON string of Tinder session cookies for automatic authentication"
-    tinderPhone:
-      type: string
-      description: "Phone number for Tinder login (optional)"
-    tinderCountryCode:
-      type: string
-      default: "1"
-      description: "Country code for phone login"
-    tinderAppleEmail:
-      type: string
-      description: "Apple ID email for authentication (optional)"
-    tinderApplePassword:
-      type: string
-      description: "Apple ID password for authentication (optional)"
-    headless:
-      type: boolean
-      default: true
-      description: "Run browser in headless mode"
-    autoLogin:
-      type: boolean
-      default: false
-      description: "Automatically login when server starts"
-    loginMethod:
-      type: string
-      enum: ["cookies", "phone", "apple"]
-      default: "cookies"
-      description: "Preferred login method for auto-authentication"
-    swipeDelay:
-      type: number
-      default: 3000
-      minimum: 1000
-      maximum: 10000
-      description: "Default delay between swipes in milliseconds"
-    debugMode:
-      type: boolean
-      default: false
-      description: "Enable debug logging and screenshots"
+  type: stdio
+  configSchema:
+    type: object
+    required: []
+    properties:
+      tinderCookies:
+        type: string
+        description: "JSON string of Tinder session cookies for automatic authentication (export from browser DevTools)"
+      tinderPhone:
+        type: string
+        description: "Phone number for Tinder login (optional, e.g., '680821181')"
+      tinderCountryCode:
+        type: string
+        default: "1"
+        description: "Country code for phone login (e.g., '34' for Spain, '1' for US)"
+      tinderAppleEmail:
+        type: string
+        description: "Apple ID email for authentication (optional)"
+      tinderApplePassword:
+        type: string
+        description: "Apple ID password for authentication (optional)"
+      headless:
+        type: boolean
+        default: true
+        description: "Run browser in headless mode (true/false)"
+      autoLogin:
+        type: boolean
+        default: false
+        description: "Automatically login when server starts (true/false)"
+      loginMethod:
+        type: string
+        enum: ["cookies", "phone", "apple"]
+        default: "cookies"
+        description: "Preferred login method for auto-authentication"
+      swipeDelay:
+        type: number
+        default: 3000
+        minimum: 1000
+        maximum: 10000
+        description: "Default delay between swipes in milliseconds"
+      debugMode:
+        type: boolean
+        default: false
+        description: "Enable debug logging and screenshots (true/false)"
+  commandFunction: |-
+    (config) => ({
+      command: 'node',
+      args: ['dist/index.js'],
+      env: {
+        TINDER_COOKIES: config.tinderCookies || '',
+        TINDER_PHONE: config.tinderPhone || '',
+        TINDER_COUNTRY_CODE: config.tinderCountryCode || '1',
+        TINDER_APPLE_EMAIL: config.tinderAppleEmail || '',
+        TINDER_APPLE_PASSWORD: config.tinderApplePassword || '',
+        HEADLESS: config.headless ? 'true' : 'false',
+        AUTO_LOGIN: config.autoLogin ? 'true' : 'false',
+        LOGIN_METHOD: config.loginMethod || 'cookies',
+        SWIPE_DELAY: config.swipeDelay?.toString() || '3000',
+        DEBUG_MODE: config.debugMode ? 'true' : 'false'
+      }
+    })
 exampleConfig:
-  tinderCookies: '[{"domain":"tinder.com","name":"session_token","value":"example123"}]'
+  tinderCookies: '[{"domain":"tinder.com","name":"AWSALBCORS","value":"V4brrUttuKuMnP3cWJ2Jr2uYygVmyOpur+k46vvWpsyyYahnnLUzo1o3HbqtmHO3NnS26sG/IxxgTXTtEq5xxubHccRFcYLzwNsJ71qDXl8LMi+GtRUZZYvHMZj3"}]'
   headless: true
   autoLogin: true
   loginMethod: "cookies"
   swipeDelay: 4000
   debugMode: false
+description: "🔥 Comprehensive Tinder automation MCP server with 22 tools for authentication, profile management, swiping, messaging, and settings. Supports cookie-based instant login."
+tags:
+  - "tinder"
+  - "dating"
+  - "automation"
+  - "browser"
+  - "social"
+  - "messaging"

@@ -33,7 +33,7 @@ class TinderMCPServer {
       },
       {
         capabilities: {
-          tools: {},
+          tools: {}, // CRITICAL: Declare tool capabilities for Smithery
         },
       }
     );
@@ -48,50 +48,26 @@ class TinderMCPServer {
     this.setupHandlers();
   }
 
-  private async autoLogin(): Promise<void> {
-    const autoLogin = process.env.AUTO_LOGIN === 'true';
-    const loginMethod = process.env.LOGIN_METHOD || 'cookies';
-    
-    if (!autoLogin) return;
-
-    try {
-      console.error('🔐 Attempting auto-login...');
-      
-      if (loginMethod === 'cookies' && process.env.TINDER_COOKIES) {
-        const result = await this.authTools.loginWithCookies(process.env.TINDER_COOKIES);
-        if (result.success) {
-          this.isAuthenticated = true;
-          console.error('✅ Auto-login successful with cookies');
-        } else {
-          console.error('❌ Cookie auto-login failed:', result.message);
-        }
-      } else if (loginMethod === 'phone' && process.env.TINDER_PHONE) {
-        const result = await this.authTools.loginWithPhone({
-          phoneNumber: process.env.TINDER_PHONE,
-          countryCode: process.env.TINDER_COUNTRY_CODE || '1'
-        });
-        console.error('📱 Phone login initiated, OTP required');
-      }
-    } catch (error) {
-      console.error('❌ Auto-login failed:', error);
-    }
-  }
-
   private setupHandlers() {
-    // List available tools
+    // CRITICAL: List tools WITHOUT requiring authentication (Smithery requirement)
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: this.getToolDefinitions(),
       };
     });
 
-    // Handle tool calls
+    // Handle tool calls with lazy authentication
     this.server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
       const { name, arguments: args } = request.params;
 
       try {
+        // Lazy authentication - only authenticate when tools are called, not when listed
+        if (!this.isAuthenticated && process.env.AUTO_LOGIN === 'true') {
+          await this.attemptAutoLogin();
+        }
+
         switch (name) {
-          // Authentication tools
+          // Authentication tools (no auth required for these)
           case 'tinder_login_phone':
             return await this.handleLoginPhone(args);
           case 'tinder_submit_otp':
@@ -162,6 +138,32 @@ class TinderMCPServer {
     });
   }
 
+  private async attemptAutoLogin(): Promise<void> {
+    const loginMethod = process.env.LOGIN_METHOD || 'cookies';
+    
+    try {
+      console.error('🔐 Attempting auto-login...');
+      
+      if (loginMethod === 'cookies' && process.env.TINDER_COOKIES) {
+        const result = await this.authTools.loginWithCookies(process.env.TINDER_COOKIES);
+        if (result.success) {
+          this.isAuthenticated = true;
+          console.error('✅ Auto-login successful with cookies');
+        } else {
+          console.error('❌ Cookie auto-login failed:', result.message);
+        }
+      } else if (loginMethod === 'phone' && process.env.TINDER_PHONE) {
+        const result = await this.authTools.loginWithPhone({
+          phoneNumber: process.env.TINDER_PHONE,
+          countryCode: process.env.TINDER_COUNTRY_CODE || '1'
+        });
+        console.error('📱 Phone login initiated, OTP required');
+      }
+    } catch (error) {
+      console.error('❌ Auto-login failed:', error);
+    }
+  }
+
   private getToolDefinitions(): Tool[] {
     return [
       // Authentication tools
@@ -173,14 +175,15 @@ class TinderMCPServer {
           properties: {
             phoneNumber: {
               type: 'string',
-              description: 'Phone number without country code',
+              description: 'Phone number without country code (e.g., "680821181")',
             },
             countryCode: {
               type: 'string',
               description: 'Country code (e.g., "1" for US, "34" for Spain)',
+              default: '1',
             },
           },
-          required: ['phoneNumber', 'countryCode'],
+          required: ['phoneNumber'],
         },
       },
       {
@@ -191,7 +194,7 @@ class TinderMCPServer {
           properties: {
             otpCode: {
               type: 'string',
-              description: '6-digit OTP code',
+              description: '6-digit OTP code from SMS',
               pattern: '^\\d{6}$',
             },
           },
@@ -200,7 +203,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_login_apple_id',
-        description: 'Login to Tinder using Apple ID (if required after phone verification)',
+        description: 'Login to Tinder using Apple ID (alternative authentication method)',
         inputSchema: {
           type: 'object',
           properties: {
@@ -223,13 +226,13 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_login_cookies',
-        description: 'Login to Tinder using saved cookies from browser session',
+        description: 'Login to Tinder using saved cookies from browser session (fastest method)',
         inputSchema: {
           type: 'object',
           properties: {
             cookies: {
               type: 'string',
-              description: 'JSON string of cookies array from browser (export from DevTools)',
+              description: 'JSON string of cookies array from browser DevTools (Application > Cookies > tinder.com)',
             },
           },
           required: ['cookies'],
@@ -303,15 +306,11 @@ class TinderMCPServer {
             },
             height: {
               type: 'string',
-              description: 'Height (e.g., "180" for cm)',
+              description: 'Height in cm (e.g., "180")',
             },
             zodiacSign: {
               type: 'string',
               description: 'Zodiac sign',
-            },
-            personalityType: {
-              type: 'string',
-              description: 'Personality type (e.g., MBTI)',
             },
             relationshipType: {
               type: 'string',
@@ -322,7 +321,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_get_profile',
-        description: 'Get current profile information',
+        description: 'Get current profile information and settings',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -332,7 +331,7 @@ class TinderMCPServer {
       // Discovery and swiping tools
       {
         name: 'tinder_swipe',
-        description: 'Perform a swipe action on the current profile',
+        description: 'Perform a manual swipe action on the current profile',
         inputSchema: {
           type: 'object',
           properties: {
@@ -347,7 +346,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_auto_swipe',
-        description: 'Automatically swipe through multiple profiles with configurable behavior',
+        description: 'Automatically swipe through multiple profiles with strategic behavior',
         inputSchema: {
           type: 'object',
           properties: {
@@ -359,13 +358,13 @@ class TinderMCPServer {
             },
             likeRatio: {
               type: 'number',
-              description: 'Ratio of likes vs passes (0.0-1.0)',
+              description: 'Ratio of likes vs passes (0.0-1.0, e.g., 0.7 = 70% likes)',
               minimum: 0,
               maximum: 1,
             },
             useSuperLikes: {
               type: 'boolean',
-              description: 'Whether to use super likes',
+              description: 'Whether to use super likes strategically',
               default: false,
             },
             superLikeRatio: {
@@ -388,7 +387,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_use_boost',
-        description: 'Activate a Tinder Boost to increase profile visibility',
+        description: 'Activate a Tinder Boost to increase profile visibility for 30 minutes',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -396,7 +395,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_view_profile',
-        description: 'Navigate through photos of the current profile',
+        description: 'Navigate through photos of the current profile being shown',
         inputSchema: {
           type: 'object',
           properties: {
@@ -411,7 +410,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_rewind',
-        description: 'Rewind the last swipe action (undo)',
+        description: 'Rewind the last swipe action (undo last swipe)',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -421,7 +420,7 @@ class TinderMCPServer {
       // Messaging tools
       {
         name: 'tinder_get_matches',
-        description: 'Get list of current matches',
+        description: 'Get list of current matches with basic information',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -429,17 +428,17 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_send_message',
-        description: 'Send a text message to a match',
+        description: 'Send a text message to a specific match',
         inputSchema: {
           type: 'object',
           properties: {
             matchName: {
               type: 'string',
-              description: 'Name of the match to message',
+              description: 'Name of the match to message (must match exactly)',
             },
             message: {
               type: 'string',
-              description: 'Message content to send',
+              description: 'Message content to send (max 500 characters)',
               maxLength: 500,
             },
           },
@@ -448,7 +447,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_send_emoji',
-        description: 'Send an emoji to a match',
+        description: 'Send an emoji reaction to a match',
         inputSchema: {
           type: 'object',
           properties: {
@@ -458,7 +457,7 @@ class TinderMCPServer {
             },
             emoji: {
               type: 'string',
-              description: 'Emoji to send (e.g., "🥰", "😍")',
+              description: 'Emoji to send (e.g., "🥰", "😍", "❤️")',
             },
           },
           required: ['matchName', 'emoji'],
@@ -479,7 +478,7 @@ class TinderMCPServer {
               properties: {
                 phoneNumber: {
                   type: 'string',
-                  description: 'Phone number to share',
+                  description: 'Phone number to share (without country code)',
                 },
                 countryCode: {
                   type: 'string',
@@ -513,7 +512,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_unmatch',
-        description: 'Unmatch with a specific person',
+        description: 'Unmatch with a specific person (removes them from matches)',
         inputSchema: {
           type: 'object',
           properties: {
@@ -608,28 +607,32 @@ class TinderMCPServer {
     ];
   }
 
-  // Authentication handlers
+  // Tool handlers (same as before but simplified)
   private async handleLoginPhone(args: any) {
     const validated = LoginWithPhoneSchema.parse(args);
     const result = await this.authTools.loginWithPhone(validated);
+    if (result.success) this.isAuthenticated = true;
     return this.formatToolResult(result);
   }
 
   private async handleSubmitOTP(args: any) {
     const validated = SubmitOTPSchema.parse(args);
     const result = await this.authTools.submitOTP(validated.otpCode);
+    if (result.success) this.isAuthenticated = true;
     return this.formatToolResult(result);
   }
 
   private async handleLoginAppleId(args: any) {
     const validated = LoginWithAppleIdSchema.parse(args);
     const result = await this.authTools.loginWithAppleId(validated);
+    if (result.success) this.isAuthenticated = true;
     return this.formatToolResult(result);
   }
 
   private async handleLoginCookies(args: any) {
     const validated = LoginWithCookiesSchema.parse(args);
     const result = await this.authTools.loginWithCookies(validated.cookies);
+    if (result.success) this.isAuthenticated = true;
     return this.formatToolResult(result);
   }
 
@@ -640,6 +643,7 @@ class TinderMCPServer {
 
   private async handleLogout() {
     const result = await this.authTools.logout();
+    if (result.success) this.isAuthenticated = false;
     return this.formatToolResult(result);
   }
 
@@ -754,11 +758,12 @@ class TinderMCPServer {
     console.error('Tinder MCP server running on stdio');
     
     // Attempt auto-login if configured
-    await this.autoLogin();
+    if (process.env.AUTO_LOGIN === 'true') {
+      await this.attemptAutoLogin();
+    }
   }
 
   async cleanup() {
-    // Cleanup all tool instances
     await this.authTools.cleanup();
     await this.profileTools.cleanup();
     await this.discoveryTools.cleanup();

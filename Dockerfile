@@ -35,12 +35,17 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including devDependencies for TypeScript build)
+RUN npm ci
 
 # Copy source code
 COPY src/ ./src/
-COPY dist/ ./dist/
+
+# Build TypeScript
+RUN npm run build
+
+# Remove devDependencies to reduce image size
+RUN npm prune --production
 
 # Create data directory for cookies and sessions
 RUN mkdir -p /app/data /app/screenshots && chmod 755 /app/data /app/screenshots
