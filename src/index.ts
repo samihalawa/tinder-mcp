@@ -1,791 +1,345 @@
-#!/usr/bin/env node
-
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  Tool,
-} from '@modelcontextprotocol/sdk/types.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 // Import tool classes
-import { AuthTools, LoginWithPhoneSchema, SubmitOTPSchema, LoginWithAppleIdSchema, LoginWithCookiesSchema } from './tools/auth.js';
-import { ProfileTools, ProfileSetupSchema } from './tools/profile.js';
-import { DiscoveryTools, SwipeSchema, AutoSwipeSchema, ViewProfileSchema } from './tools/discovery.js';
-import { MessagingTools, SendMessageSchema, SendEmojiSchema, ShareContactSchema, GetConversationSchema, UnmatchSchema } from './tools/messaging.js';
-import { SettingsTools, UpdateSettingsSchema } from './tools/settings.js';
+import { AuthTools } from './tools/auth.js';
+import { ProfileTools } from './tools/profile.js';
+import { DiscoveryTools } from './tools/discovery.js';
+import { MessagingTools } from './tools/messaging.js';
+import { SettingsTools } from './tools/settings.js';
 
-class TinderMCPServer {
-  private server: Server;
-  private authTools: AuthTools;
-  private profileTools: ProfileTools;
-  private discoveryTools: DiscoveryTools;
-  private messagingTools: MessagingTools;
-  private settingsTools: SettingsTools;
-  private isAuthenticated: boolean = false;
+// Configuration schema for Smithery
+export const configSchema = z.object({
+  tinderCookies: z.string().optional().describe("JSON string of Tinder session cookies for automatic authentication"),
+  tinderPhone: z.string().optional().describe("Phone number for Tinder login (e.g., '680821181')"),
+  tinderCountryCode: z.string().default('1').describe("Country code for phone login (e.g., '34' for Spain)"),
+  tinderAppleEmail: z.string().optional().describe("Apple ID email for authentication"),
+  tinderApplePassword: z.string().optional().describe("Apple ID password for authentication"),
+  headless: z.boolean().default(true).describe("Run browser in headless mode"),
+  autoLogin: z.boolean().default(false).describe("Automatically login when server starts"),
+  loginMethod: z.enum(['cookies', 'phone', 'apple']).default('cookies').describe("Preferred login method"),
+  swipeDelay: z.number().min(1000).max(10000).default(3000).describe("Default delay between swipes in milliseconds"),
+  debugMode: z.boolean().default(false).describe("Enable debug logging and screenshots")
+});
 
-  constructor() {
-    this.server = new Server(
-      {
-        name: 'tinder-mcp',
-        version: '1.0.0',
-      },
-      {
-        capabilities: {
-          tools: {}, // CRITICAL: Declare tool capabilities for Smithery
-        },
-      }
-    );
+export default function createTinderServer({ config }: { config: z.infer<typeof configSchema> }) {
+  const server = new McpServer({
+    name: 'Tinder MCP Server',
+    version: '1.0.0'
+  });
 
-    // Initialize tool classes
-    this.authTools = new AuthTools();
-    this.profileTools = new ProfileTools();
-    this.discoveryTools = new DiscoveryTools();
-    this.messagingTools = new MessagingTools();
-    this.settingsTools = new SettingsTools();
+  // Initialize tool classes
+  const authTools = new AuthTools();
+  const profileTools = new ProfileTools();
+  const discoveryTools = new DiscoveryTools();
+  const messagingTools = new MessagingTools();
+  const settingsTools = new SettingsTools();
 
-    this.setupHandlers();
-  }
+  // Set environment variables from config
+  if (config.tinderCookies) process.env.TINDER_COOKIES = config.tinderCookies;
+  if (config.tinderPhone) process.env.TINDER_PHONE = config.tinderPhone;
+  if (config.tinderCountryCode) process.env.TINDER_COUNTRY_CODE = config.tinderCountryCode;
+  if (config.tinderAppleEmail) process.env.TINDER_APPLE_EMAIL = config.tinderAppleEmail;
+  if (config.tinderApplePassword) process.env.TINDER_APPLE_PASSWORD = config.tinderApplePassword;
+  process.env.HEADLESS = config.headless.toString();
+  process.env.AUTO_LOGIN = config.autoLogin.toString();
+  process.env.LOGIN_METHOD = config.loginMethod;
+  process.env.SWIPE_DELAY = config.swipeDelay.toString();
+  process.env.DEBUG_MODE = config.debugMode.toString();
 
-  private setupHandlers() {
-    // CRITICAL: List tools WITHOUT requiring authentication (Smithery requirement)
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: this.getToolDefinitions(),
-      };
-    });
-
-    // Handle tool calls with lazy authentication
-    this.server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
-      const { name, arguments: args } = request.params;
-
-      try {
-        // Lazy authentication - only authenticate when tools are called, not when listed
-        if (!this.isAuthenticated && process.env.AUTO_LOGIN === 'true') {
-          await this.attemptAutoLogin();
-        }
-
-        switch (name) {
-          // Authentication tools (no auth required for these)
-          case 'tinder_login_phone':
-            return await this.handleLoginPhone(args);
-          case 'tinder_submit_otp':
-            return await this.handleSubmitOTP(args);
-          case 'tinder_login_apple_id':
-            return await this.handleLoginAppleId(args);
-          case 'tinder_login_cookies':
-            return await this.handleLoginCookies(args);
-          case 'tinder_check_login_status':
-            return await this.handleCheckLoginStatus();
-          case 'tinder_logout':
-            return await this.handleLogout();
-
-          // Profile management tools
-          case 'tinder_setup_profile':
-            return await this.handleSetupProfile(args);
-          case 'tinder_get_profile':
-            return await this.handleGetProfile();
-
-          // Discovery and swiping tools
-          case 'tinder_swipe':
-            return await this.handleSwipe(args);
-          case 'tinder_auto_swipe':
-            return await this.handleAutoSwipe(args);
-          case 'tinder_use_boost':
-            return await this.handleUseBoost();
-          case 'tinder_view_profile':
-            return await this.handleViewProfile(args);
-          case 'tinder_rewind':
-            return await this.handleRewind();
-
-          // Messaging tools
-          case 'tinder_get_matches':
-            return await this.handleGetMatches();
-          case 'tinder_send_message':
-            return await this.handleSendMessage(args);
-          case 'tinder_send_emoji':
-            return await this.handleSendEmoji(args);
-          case 'tinder_share_contact':
-            return await this.handleShareContact(args);
-          case 'tinder_get_conversation':
-            return await this.handleGetConversation(args);
-          case 'tinder_unmatch':
-            return await this.handleUnmatch(args);
-
-          // Settings tools
-          case 'tinder_update_settings':
-            return await this.handleUpdateSettings(args);
-          case 'tinder_get_settings':
-            return await this.handleGetSettings();
-          case 'tinder_reset_settings':
-            return await this.handleResetSettings();
-
-          default:
-            throw new Error(`Unknown tool: ${name}`);
-        }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error executing ${name}: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    });
-  }
-
-  private async attemptAutoLogin(): Promise<void> {
-    const loginMethod = process.env.LOGIN_METHOD || 'cookies';
-    
-    try {
-      console.error('🔐 Attempting auto-login...');
-      
-      if (loginMethod === 'cookies' && process.env.TINDER_COOKIES) {
-        const result = await this.authTools.loginWithCookies(process.env.TINDER_COOKIES);
-        if (result.success) {
-          this.isAuthenticated = true;
-          console.error('✅ Auto-login successful with cookies');
-        } else {
-          console.error('❌ Cookie auto-login failed:', result.message);
-        }
-      } else if (loginMethod === 'phone' && process.env.TINDER_PHONE) {
-        const result = await this.authTools.loginWithPhone({
-          phoneNumber: process.env.TINDER_PHONE,
-          countryCode: process.env.TINDER_COUNTRY_CODE || '1'
-        });
-        console.error('📱 Phone login initiated, OTP required');
-      }
-    } catch (error) {
-      console.error('❌ Auto-login failed:', error);
+  // Authentication tools
+  server.tool(
+    'tinder_login_phone',
+    'Login to Tinder using phone number and OTP verification',
+    {
+      phoneNumber: z.string().describe('Phone number without country code (e.g., "680821181")'),
+      countryCode: z.string().default('1').describe('Country code (e.g., "34" for Spain)')
+    },
+    async ({ phoneNumber, countryCode }: { phoneNumber: string; countryCode: string }) => {
+      const result = await authTools.loginWithPhone({ phoneNumber, countryCode });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
-  }
+  );
 
-  private getToolDefinitions(): Tool[] {
-    return [
-      // Authentication tools
-      {
-        name: 'tinder_login_phone',
-        description: 'Login to Tinder using phone number and OTP verification',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            phoneNumber: {
-              type: 'string',
-              description: 'Phone number without country code (e.g., "680821181")',
-            },
-            countryCode: {
-              type: 'string',
-              description: 'Country code (e.g., "1" for US, "34" for Spain)',
-              default: '1',
-            },
-          },
-          required: ['phoneNumber'],
-        },
-      },
-      {
-        name: 'tinder_submit_otp',
-        description: 'Submit OTP code received via SMS for phone login',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            otpCode: {
-              type: 'string',
-              description: '6-digit OTP code from SMS',
-              pattern: '^\\d{6}$',
-            },
-          },
-          required: ['otpCode'],
-        },
-      },
-      {
-        name: 'tinder_login_apple_id',
-        description: 'Login to Tinder using Apple ID (alternative authentication method)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            email: {
-              type: 'string',
-              description: 'Apple ID email address',
-            },
-            password: {
-              type: 'string',
-              description: 'Apple ID password',
-            },
-            twoFactorCode: {
-              type: 'string',
-              description: '6-digit 2FA code (optional)',
-              pattern: '^\\d{6}$',
-            },
-          },
-          required: ['email', 'password'],
-        },
-      },
-      {
-        name: 'tinder_login_cookies',
-        description: 'Login to Tinder using saved cookies from browser session (fastest method)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            cookies: {
-              type: 'string',
-              description: 'JSON string of cookies array from browser DevTools (Application > Cookies > tinder.com)',
-            },
-          },
-          required: ['cookies'],
-        },
-      },
-      {
-        name: 'tinder_check_login_status',
-        description: 'Check if currently logged in to Tinder',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'tinder_logout',
-        description: 'Logout from Tinder and clear session',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-
-      // Profile management tools
-      {
-        name: 'tinder_setup_profile',
-        description: 'Setup or update Tinder profile with photos, bio, and personal information',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            photos: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Array of photo file paths to upload',
-            },
-            bio: {
-              type: 'string',
-              description: 'Profile bio/description (max 500 characters)',
-              maxLength: 500,
-            },
-            job: {
-              type: 'string',
-              description: 'Job title',
-            },
-            company: {
-              type: 'string',
-              description: 'Company name',
-            },
-            education: {
-              type: 'string',
-              description: 'Education level',
-            },
-            school: {
-              type: 'string',
-              description: 'School/university name',
-            },
-            location: {
-              type: 'string',
-              description: 'Location/city',
-            },
-            interests: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Array of interests (max 5)',
-              maxItems: 5,
-            },
-            languages: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Array of languages spoken (max 3)',
-              maxItems: 3,
-            },
-            height: {
-              type: 'string',
-              description: 'Height in cm (e.g., "180")',
-            },
-            zodiacSign: {
-              type: 'string',
-              description: 'Zodiac sign',
-            },
-            relationshipType: {
-              type: 'string',
-              description: 'Looking for relationship type',
-            },
-          },
-        },
-      },
-      {
-        name: 'tinder_get_profile',
-        description: 'Get current profile information and settings',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-
-      // Discovery and swiping tools
-      {
-        name: 'tinder_swipe',
-        description: 'Perform a manual swipe action on the current profile',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            action: {
-              type: 'string',
-              enum: ['like', 'pass', 'superlike'],
-              description: 'Swipe action to perform',
-            },
-          },
-          required: ['action'],
-        },
-      },
-      {
-        name: 'tinder_auto_swipe',
-        description: 'Automatically swipe through multiple profiles with strategic behavior',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            count: {
-              type: 'number',
-              description: 'Number of profiles to swipe (1-100)',
-              minimum: 1,
-              maximum: 100,
-            },
-            likeRatio: {
-              type: 'number',
-              description: 'Ratio of likes vs passes (0.0-1.0, e.g., 0.7 = 70% likes)',
-              minimum: 0,
-              maximum: 1,
-            },
-            useSuperLikes: {
-              type: 'boolean',
-              description: 'Whether to use super likes strategically',
-              default: false,
-            },
-            superLikeRatio: {
-              type: 'number',
-              description: 'Ratio of super likes vs regular likes (0.0-1.0)',
-              minimum: 0,
-              maximum: 1,
-              default: 0.1,
-            },
-            delayBetweenSwipes: {
-              type: 'number',
-              description: 'Delay between swipes in milliseconds (1000-10000)',
-              minimum: 1000,
-              maximum: 10000,
-              default: 3000,
-            },
-          },
-          required: ['count', 'likeRatio'],
-        },
-      },
-      {
-        name: 'tinder_use_boost',
-        description: 'Activate a Tinder Boost to increase profile visibility for 30 minutes',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'tinder_view_profile',
-        description: 'Navigate through photos of the current profile being shown',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            direction: {
-              type: 'string',
-              enum: ['next', 'previous'],
-              description: 'Direction to navigate photos',
-              default: 'next',
-            },
-          },
-        },
-      },
-      {
-        name: 'tinder_rewind',
-        description: 'Rewind the last swipe action (undo last swipe)',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-
-      // Messaging tools
-      {
-        name: 'tinder_get_matches',
-        description: 'Get list of current matches with basic information',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'tinder_send_message',
-        description: 'Send a text message to a specific match',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            matchName: {
-              type: 'string',
-              description: 'Name of the match to message (must match exactly)',
-            },
-            message: {
-              type: 'string',
-              description: 'Message content to send (max 500 characters)',
-              maxLength: 500,
-            },
-          },
-          required: ['matchName', 'message'],
-        },
-      },
-      {
-        name: 'tinder_send_emoji',
-        description: 'Send an emoji reaction to a match',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            matchName: {
-              type: 'string',
-              description: 'Name of the match to send emoji to',
-            },
-            emoji: {
-              type: 'string',
-              description: 'Emoji to send (e.g., "🥰", "😍", "❤️")',
-            },
-          },
-          required: ['matchName', 'emoji'],
-        },
-      },
-      {
-        name: 'tinder_share_contact',
-        description: 'Share contact information (phone/WhatsApp) with a match',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            matchName: {
-              type: 'string',
-              description: 'Name of the match to share contact with',
-            },
-            contactInfo: {
-              type: 'object',
-              properties: {
-                phoneNumber: {
-                  type: 'string',
-                  description: 'Phone number to share (without country code)',
-                },
-                countryCode: {
-                  type: 'string',
-                  description: 'Country code (e.g., "34" for Spain)',
-                },
-                type: {
-                  type: 'string',
-                  enum: ['whatsapp', 'phone'],
-                  description: 'Type of contact to share',
-                },
-              },
-              required: ['phoneNumber', 'countryCode', 'type'],
-            },
-          },
-          required: ['matchName', 'contactInfo'],
-        },
-      },
-      {
-        name: 'tinder_get_conversation',
-        description: 'Get conversation history with a specific match',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            matchName: {
-              type: 'string',
-              description: 'Name of the match to get conversation for',
-            },
-          },
-          required: ['matchName'],
-        },
-      },
-      {
-        name: 'tinder_unmatch',
-        description: 'Unmatch with a specific person (removes them from matches)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            matchName: {
-              type: 'string',
-              description: 'Name of the match to unmatch with',
-            },
-          },
-          required: ['matchName'],
-        },
-      },
-
-      // Settings tools
-      {
-        name: 'tinder_update_settings',
-        description: 'Update Tinder discovery and preference settings',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            ageRange: {
-              type: 'object',
-              properties: {
-                min: {
-                  type: 'number',
-                  minimum: 18,
-                  maximum: 100,
-                  description: 'Minimum age preference',
-                },
-                max: {
-                  type: 'number',
-                  minimum: 18,
-                  maximum: 100,
-                  description: 'Maximum age preference',
-                },
-              },
-            },
-            maxDistance: {
-              type: 'number',
-              minimum: 1,
-              maximum: 160,
-              description: 'Maximum distance in km',
-            },
-            showMe: {
-              type: 'string',
-              enum: ['men', 'women', 'everyone'],
-              description: 'Gender preference to show',
-            },
-            interestedIn: {
-              type: 'string',
-              enum: ['men', 'women', 'everyone'],
-              description: 'Gender you are interested in',
-            },
-            globalMode: {
-              type: 'boolean',
-              description: 'Enable global/passport mode',
-            },
-            hideAge: {
-              type: 'boolean',
-              description: 'Hide your age from profile',
-            },
-            hideDistance: {
-              type: 'boolean',
-              description: 'Hide distance from profile',
-            },
-            onlyShowWithPhotos: {
-              type: 'boolean',
-              description: 'Only show profiles with photos',
-            },
-            recentlyActive: {
-              type: 'boolean',
-              description: 'Only show recently active users',
-            },
-          },
-        },
-      },
-      {
-        name: 'tinder_get_settings',
-        description: 'Get current Tinder settings and preferences',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'tinder_reset_settings',
-        description: 'Reset all settings to default values',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-    ];
-  }
-
-  // Tool handlers (same as before but simplified)
-  private async handleLoginPhone(args: any) {
-    const validated = LoginWithPhoneSchema.parse(args);
-    const result = await this.authTools.loginWithPhone(validated);
-    if (result.success) this.isAuthenticated = true;
-    return this.formatToolResult(result);
-  }
-
-  private async handleSubmitOTP(args: any) {
-    const validated = SubmitOTPSchema.parse(args);
-    const result = await this.authTools.submitOTP(validated.otpCode);
-    if (result.success) this.isAuthenticated = true;
-    return this.formatToolResult(result);
-  }
-
-  private async handleLoginAppleId(args: any) {
-    const validated = LoginWithAppleIdSchema.parse(args);
-    const result = await this.authTools.loginWithAppleId(validated);
-    if (result.success) this.isAuthenticated = true;
-    return this.formatToolResult(result);
-  }
-
-  private async handleLoginCookies(args: any) {
-    const validated = LoginWithCookiesSchema.parse(args);
-    const result = await this.authTools.loginWithCookies(validated.cookies);
-    if (result.success) this.isAuthenticated = true;
-    return this.formatToolResult(result);
-  }
-
-  private async handleCheckLoginStatus() {
-    const result = await this.authTools.checkLoginStatus();
-    return this.formatToolResult(result);
-  }
-
-  private async handleLogout() {
-    const result = await this.authTools.logout();
-    if (result.success) this.isAuthenticated = false;
-    return this.formatToolResult(result);
-  }
-
-  // Profile handlers
-  private async handleSetupProfile(args: any) {
-    const validated = ProfileSetupSchema.parse(args);
-    const result = await this.profileTools.setupProfile(validated);
-    return this.formatToolResult(result);
-  }
-
-  private async handleGetProfile() {
-    const result = await this.profileTools.getProfile();
-    return this.formatToolResult(result);
-  }
-
-  // Discovery handlers
-  private async handleSwipe(args: any) {
-    const validated = SwipeSchema.parse(args);
-    const result = await this.discoveryTools.swipe(validated.action);
-    return this.formatToolResult(result);
-  }
-
-  private async handleAutoSwipe(args: any) {
-    const validated = AutoSwipeSchema.parse(args);
-    const result = await this.discoveryTools.autoSwipe(validated);
-    return this.formatToolResult(result);
-  }
-
-  private async handleUseBoost() {
-    const result = await this.discoveryTools.useBoost();
-    return this.formatToolResult(result);
-  }
-
-  private async handleViewProfile(args: any) {
-    const validated = ViewProfileSchema.parse(args);
-    const result = await this.discoveryTools.viewProfile(validated.direction);
-    return this.formatToolResult(result);
-  }
-
-  private async handleRewind() {
-    const result = await this.discoveryTools.rewind();
-    return this.formatToolResult(result);
-  }
-
-  // Messaging handlers
-  private async handleGetMatches() {
-    const result = await this.messagingTools.getMatches();
-    return this.formatToolResult(result);
-  }
-
-  private async handleSendMessage(args: any) {
-    const validated = SendMessageSchema.parse(args);
-    const result = await this.messagingTools.sendMessage(validated.matchName, validated.message);
-    return this.formatToolResult(result);
-  }
-
-  private async handleSendEmoji(args: any) {
-    const validated = SendEmojiSchema.parse(args);
-    const result = await this.messagingTools.sendEmoji(validated.matchName, validated.emoji);
-    return this.formatToolResult(result);
-  }
-
-  private async handleShareContact(args: any) {
-    const validated = ShareContactSchema.parse(args);
-    const result = await this.messagingTools.shareContact(validated.matchName, validated.contactInfo);
-    return this.formatToolResult(result);
-  }
-
-  private async handleGetConversation(args: any) {
-    const validated = GetConversationSchema.parse(args);
-    const result = await this.messagingTools.getConversation(validated.matchName);
-    return this.formatToolResult(result);
-  }
-
-  private async handleUnmatch(args: any) {
-    const validated = UnmatchSchema.parse(args);
-    const result = await this.messagingTools.unmatch(validated.matchName);
-    return this.formatToolResult(result);
-  }
-
-  // Settings handlers
-  private async handleUpdateSettings(args: any) {
-    const validated = UpdateSettingsSchema.parse(args);
-    const result = await this.settingsTools.updateSettings(validated);
-    return this.formatToolResult(result);
-  }
-
-  private async handleGetSettings() {
-    const result = await this.settingsTools.getSettings();
-    return this.formatToolResult(result);
-  }
-
-  private async handleResetSettings() {
-    const result = await this.settingsTools.resetSettings();
-    return this.formatToolResult(result);
-  }
-
-  private formatToolResult(result: any) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  }
-
-  async run() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Tinder MCP server running on stdio');
-    
-    // Attempt auto-login if configured
-    if (process.env.AUTO_LOGIN === 'true') {
-      await this.attemptAutoLogin();
+  server.tool(
+    'tinder_submit_otp',
+    'Submit OTP code received via SMS for phone login',
+    {
+      otpCode: z.string().regex(/^\d{6}$/).describe('6-digit OTP code from SMS')
+    },
+    async ({ otpCode }: { otpCode: string }) => {
+      const result = await authTools.submitOTP(otpCode);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
+  );
+
+  server.tool(
+    'tinder_login_apple_id',
+    'Login to Tinder using Apple ID (alternative authentication method)',
+    {
+      email: z.string().email().describe('Apple ID email address'),
+      password: z.string().describe('Apple ID password'),
+      twoFactorCode: z.string().regex(/^\d{6}$/).optional().describe('6-digit 2FA code (optional)')
+    },
+    async ({ email, password, twoFactorCode }: { email: string; password: string; twoFactorCode?: string }) => {
+      const result = await authTools.loginWithAppleId({ email, password, twoFactorCode });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_login_cookies',
+    'Login to Tinder using saved cookies from browser session (fastest method)',
+    {
+      cookies: z.string().describe('JSON string of cookies array from browser DevTools')
+    },
+    async ({ cookies }: { cookies: string }) => {
+      const result = await authTools.loginWithCookies(cookies);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_check_login_status',
+    'Check if currently logged in to Tinder',
+    {},
+    async () => {
+      const result = await authTools.checkLoginStatus();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_logout',
+    'Logout from Tinder and clear session',
+    {},
+    async () => {
+      const result = await authTools.logout();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // Profile management tools
+  server.tool(
+    'tinder_setup_profile',
+    'Setup or update Tinder profile with photos, bio, and personal information',
+    {
+      photos: z.array(z.string()).optional().describe('Array of photo file paths to upload'),
+      bio: z.string().max(500).optional().describe('Profile bio/description (max 500 characters)'),
+      job: z.string().optional().describe('Job title'),
+      company: z.string().optional().describe('Company name'),
+      education: z.string().optional().describe('Education level'),
+      school: z.string().optional().describe('School/university name'),
+      location: z.string().optional().describe('Location/city'),
+      interests: z.array(z.string()).max(5).optional().describe('Array of interests (max 5)'),
+      languages: z.array(z.string()).max(3).optional().describe('Array of languages spoken (max 3)'),
+      height: z.string().optional().describe('Height in cm (e.g., "180")'),
+      zodiacSign: z.string().optional().describe('Zodiac sign'),
+      relationshipType: z.string().optional().describe('Looking for relationship type')
+    },
+    async (params: any) => {
+      const result = await profileTools.setupProfile(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_get_profile',
+    'Get current profile information and settings',
+    {},
+    async () => {
+      const result = await profileTools.getProfile();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // Discovery and swiping tools
+  server.tool(
+    'tinder_swipe',
+    'Perform a manual swipe action on the current profile',
+    {
+      action: z.enum(['like', 'pass', 'superlike']).describe('Swipe action to perform')
+    },
+    async ({ action }: { action: 'like' | 'pass' | 'superlike' }) => {
+      const result = await discoveryTools.swipe(action);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_auto_swipe',
+    'Automatically swipe through multiple profiles with strategic behavior',
+    {
+      count: z.number().min(1).max(100).describe('Number of profiles to swipe (1-100)'),
+      likeRatio: z.number().min(0).max(1).describe('Ratio of likes vs passes (0.0-1.0)'),
+      useSuperLikes: z.boolean().default(false).describe('Whether to use super likes strategically'),
+      superLikeRatio: z.number().min(0).max(1).default(0.1).describe('Ratio of super likes vs regular likes'),
+      delayBetweenSwipes: z.number().min(1000).max(10000).default(3000).describe('Delay between swipes in milliseconds')
+    },
+    async (params: any) => {
+      const result = await discoveryTools.autoSwipe(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_use_boost',
+    'Activate a Tinder Boost to increase profile visibility for 30 minutes',
+    {},
+    async () => {
+      const result = await discoveryTools.useBoost();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_view_profile',
+    'Navigate through photos of the current profile being shown',
+    {
+      direction: z.enum(['next', 'previous']).default('next').describe('Direction to navigate photos')
+    },
+    async ({ direction }: { direction: 'next' | 'previous' }) => {
+      const result = await discoveryTools.viewProfile(direction);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_rewind',
+    'Rewind the last swipe action (undo last swipe)',
+    {},
+    async () => {
+      const result = await discoveryTools.rewind();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // Messaging tools
+  server.tool(
+    'tinder_get_matches',
+    'Get list of current matches with basic information',
+    {},
+    async () => {
+      const result = await messagingTools.getMatches();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_send_message',
+    'Send a text message to a specific match',
+    {
+      matchName: z.string().describe('Name of the match to message (must match exactly)'),
+      message: z.string().max(500).describe('Message content to send (max 500 characters)')
+    },
+    async ({ matchName, message }: { matchName: string; message: string }) => {
+      const result = await messagingTools.sendMessage(matchName, message);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_send_emoji',
+    'Send an emoji reaction to a match',
+    {
+      matchName: z.string().describe('Name of the match to send emoji to'),
+      emoji: z.string().describe('Emoji to send (e.g., "🥰", "😍", "❤️")')
+    },
+    async ({ matchName, emoji }: { matchName: string; emoji: string }) => {
+      const result = await messagingTools.sendEmoji(matchName, emoji);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_share_contact',
+    'Share contact information (phone/WhatsApp) with a match',
+    {
+      matchName: z.string().describe('Name of the match to share contact with'),
+      contactInfo: z.object({
+        phoneNumber: z.string().describe('Phone number to share (without country code)'),
+        countryCode: z.string().describe('Country code (e.g., "34" for Spain)'),
+        type: z.enum(['whatsapp', 'phone']).describe('Type of contact to share')
+      })
+    },
+    async ({ matchName, contactInfo }: { matchName: string; contactInfo: any }) => {
+      const result = await messagingTools.shareContact(matchName, contactInfo);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_get_conversation',
+    'Get conversation history with a specific match',
+    {
+      matchName: z.string().describe('Name of the match to get conversation for')
+    },
+    async ({ matchName }: { matchName: string }) => {
+      const result = await messagingTools.getConversation(matchName);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_unmatch',
+    'Unmatch with a specific person (removes them from matches)',
+    {
+      matchName: z.string().describe('Name of the match to unmatch with')
+    },
+    async ({ matchName }: { matchName: string }) => {
+      const result = await messagingTools.unmatch(matchName);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // Settings tools
+  server.tool(
+    'tinder_update_settings',
+    'Update Tinder discovery and preference settings',
+    {
+      ageRange: z.object({
+        min: z.number().min(18).max(100).describe('Minimum age preference'),
+        max: z.number().min(18).max(100).describe('Maximum age preference')
+      }).optional(),
+      maxDistance: z.number().min(1).max(160).optional().describe('Maximum distance in km'),
+      showMe: z.enum(['men', 'women', 'everyone']).optional().describe('Gender preference to show'),
+      interestedIn: z.enum(['men', 'women', 'everyone']).optional().describe('Gender you are interested in'),
+      globalMode: z.boolean().optional().describe('Enable global/passport mode'),
+      hideAge: z.boolean().optional().describe('Hide your age from profile'),
+      hideDistance: z.boolean().optional().describe('Hide distance from profile'),
+      onlyShowWithPhotos: z.boolean().optional().describe('Only show profiles with photos'),
+      recentlyActive: z.boolean().optional().describe('Only show recently active users')
+    },
+    async (params: any) => {
+      const result = await settingsTools.updateSettings(params);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_get_settings',
+    'Get current Tinder settings and preferences',
+    {},
+    async () => {
+      const result = await settingsTools.getSettings();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'tinder_reset_settings',
+    'Reset all settings to default values',
+    {},
+    async () => {
+      const result = await settingsTools.resetSettings();
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // Auto-login if configured
+  if (config.autoLogin && config.tinderCookies) {
+    authTools.loginWithCookies(config.tinderCookies).catch(console.error);
   }
 
-  async cleanup() {
-    await this.authTools.cleanup();
-    await this.profileTools.cleanup();
-    await this.discoveryTools.cleanup();
-    await this.messagingTools.cleanup();
-    await this.settingsTools.cleanup();
-  }
+  return server.server;
 }
-
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-  console.error('Received SIGINT, shutting down gracefully...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.error('Received SIGTERM, shutting down gracefully...');
-  process.exit(0);
-});
-
-// Start the server
-const server = new TinderMCPServer();
-server.run().catch((error) => {
-  console.error('Server error:', error);
-  process.exit(1);
-});

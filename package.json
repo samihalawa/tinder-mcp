@@ -1,8 +1,8 @@
 {
   "name": "tinder-mcp",
   "version": "1.0.0",
-  "description": "Comprehensive Tinder MCP tool for automation and interaction",
-  "main": "dist/index.js",
+  "description": "🔥 Comprehensive Tinder automation MCP server with 22 tools for authentication, profile management, swiping, messaging, and settings. Supports cookie-based instant login.",
+  "module": "./src/index.ts",
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -18,12 +18,14 @@
     "automation",
     "dating",
     "browser-automation",
-    "smithery"
+    "smithery",
+    "social",
+    "messaging"
   ],
   "author": "Sami Halawa",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.5.0",
+    "@modelcontextprotocol/sdk": "^1.16.0",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.3.0",
     "playwright": "^1.40.0",
