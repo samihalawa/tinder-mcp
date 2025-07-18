@@ -1,21 +1,32 @@
-# Tinder MCP Server Dockerfile
-FROM node:18-alpine
+# Tinder MCP Server - Smithery Compatible
+FROM node:18-slim
 
 # Install system dependencies for Playwright
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     chromium \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    && rm -rf /var/cache/apk/*
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set Playwright to use system Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    PLAYWRIGHT_BROWSERS_PATH=/usr/bin/chromium-browser
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    PLAYWRIGHT_BROWSERS_PATH=/usr/bin/chromium
 
 # Create app directory
 WORKDIR /app
@@ -32,11 +43,11 @@ COPY src/ ./src/
 COPY dist/ ./dist/
 
 # Create data directory for cookies and sessions
-RUN mkdir -p /app/data && chmod 755 /app/data
+RUN mkdir -p /app/data /app/screenshots && chmod 755 /app/data /app/screenshots
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S tinder -u 1001 -G nodejs
+RUN addgroup --gid 1001 --system nodejs && \
+    adduser --system --uid 1001 --gid 1001 tinder
 
 # Change ownership of app directory
 RUN chown -R tinder:nodejs /app
@@ -44,18 +55,20 @@ RUN chown -R tinder:nodejs /app
 # Switch to non-root user
 USER tinder
 
-# Expose port (if needed for HTTP interface)
+# Expose MCP HTTP endpoint
 EXPOSE 3000
 
-# Health check
+# Health check for Smithery
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD node -e "console.log('Health check passed')" || exit 1
+    CMD curl -f http://localhost:3000/health || exit 1
 
-# Default command
-CMD ["node", "dist/index.js"]
+# Start MCP server with HTTP transport for Smithery
+CMD ["node", "dist/http-server.js"]
 
-# Labels for metadata
+# Labels for Smithery metadata
 LABEL maintainer="Sami Halawa <samihalawaster@icloud.com>"
-LABEL description="Tinder MCP Server - Comprehensive automation tool"
+LABEL description="Comprehensive Tinder automation MCP server"
 LABEL version="1.0.0"
+LABEL mcp.tools="22"
+LABEL mcp.categories="automation,dating,social,browser"
 LABEL org.opencontainers.image.source="https://github.com/samihalawa/tinder-mcp"

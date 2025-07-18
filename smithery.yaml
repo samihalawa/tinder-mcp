@@ -1,0 +1,56 @@
+version: 1
+runtime: container
+startCommand:
+  type: http
+build:
+  dockerfile: "Dockerfile"
+  dockerBuildPath: "."
+configSchema:
+  type: object
+  properties:
+    tinderCookies:
+      type: string
+      description: "JSON string of Tinder session cookies for automatic authentication"
+    tinderPhone:
+      type: string
+      description: "Phone number for Tinder login (optional)"
+    tinderCountryCode:
+      type: string
+      default: "1"
+      description: "Country code for phone login"
+    tinderAppleEmail:
+      type: string
+      description: "Apple ID email for authentication (optional)"
+    tinderApplePassword:
+      type: string
+      description: "Apple ID password for authentication (optional)"
+    headless:
+      type: boolean
+      default: true
+      description: "Run browser in headless mode"
+    autoLogin:
+      type: boolean
+      default: false
+      description: "Automatically login when server starts"
+    loginMethod:
+      type: string
+      enum: ["cookies", "phone", "apple"]
+      default: "cookies"
+      description: "Preferred login method for auto-authentication"
+    swipeDelay:
+      type: number
+      default: 3000
+      minimum: 1000
+      maximum: 10000
+      description: "Default delay between swipes in milliseconds"
+    debugMode:
+      type: boolean
+      default: false
+      description: "Enable debug logging and screenshots"
+exampleConfig:
+  tinderCookies: '[{"domain":"tinder.com","name":"session_token","value":"example123"}]'
+  headless: true
+  autoLogin: true
+  loginMethod: "cookies"
+  swipeDelay: 4000
+  debugMode: false

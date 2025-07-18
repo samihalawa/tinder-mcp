@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import express from 'express';
+import cors from 'cors';
 
 // Import tool classes
 import { AuthTools, LoginWithPhoneSchema, SubmitOTPSchema, LoginWithAppleIdSchema, LoginWithCookiesSchema } from './tools/auth.js';
@@ -16,13 +18,30 @@ import { DiscoveryTools, SwipeSchema, AutoSwipeSchema, ViewProfileSchema } from 
 import { MessagingTools, SendMessageSchema, SendEmojiSchema, ShareContactSchema, GetConversationSchema, UnmatchSchema } from './tools/messaging.js';
 import { SettingsTools, UpdateSettingsSchema } from './tools/settings.js';
 
-class TinderMCPServer {
+// Configuration schema for Smithery
+const ConfigSchema = z.object({
+  tinderCookies: z.string().optional(),
+  tinderPhone: z.string().optional(),
+  tinderCountryCode: z.string().default('1'),
+  tinderAppleEmail: z.string().optional(),
+  tinderApplePassword: z.string().optional(),
+  headless: z.boolean().default(true),
+  autoLogin: z.boolean().default(false),
+  loginMethod: z.enum(['cookies', 'phone', 'apple']).default('cookies'),
+  swipeDelay: z.number().min(1000).max(10000).default(3000),
+  debugMode: z.boolean().default(false),
+});
+
+type Config = z.infer<typeof ConfigSchema>;
+
+class TinderMCPHTTPServer {
   private server: Server;
   private authTools: AuthTools;
   private profileTools: ProfileTools;
   private discoveryTools: DiscoveryTools;
   private messagingTools: MessagingTools;
   private settingsTools: SettingsTools;
+  private config: Config | null = null;
   private isAuthenticated: boolean = false;
 
   constructor() {
@@ -33,7 +52,7 @@ class TinderMCPServer {
       },
       {
         capabilities: {
-          tools: {},
+          tools: {}, // CRITICAL: Declare tool capabilities for Smithery
         },
       }
     );
@@ -48,50 +67,26 @@ class TinderMCPServer {
     this.setupHandlers();
   }
 
-  private async autoLogin(): Promise<void> {
-    const autoLogin = process.env.AUTO_LOGIN === 'true';
-    const loginMethod = process.env.LOGIN_METHOD || 'cookies';
-    
-    if (!autoLogin) return;
-
-    try {
-      console.error('🔐 Attempting auto-login...');
-      
-      if (loginMethod === 'cookies' && process.env.TINDER_COOKIES) {
-        const result = await this.authTools.loginWithCookies(process.env.TINDER_COOKIES);
-        if (result.success) {
-          this.isAuthenticated = true;
-          console.error('✅ Auto-login successful with cookies');
-        } else {
-          console.error('❌ Cookie auto-login failed:', result.message);
-        }
-      } else if (loginMethod === 'phone' && process.env.TINDER_PHONE) {
-        const result = await this.authTools.loginWithPhone({
-          phoneNumber: process.env.TINDER_PHONE,
-          countryCode: process.env.TINDER_COUNTRY_CODE || '1'
-        });
-        console.error('📱 Phone login initiated, OTP required');
-      }
-    } catch (error) {
-      console.error('❌ Auto-login failed:', error);
-    }
-  }
-
   private setupHandlers() {
-    // List available tools
+    // CRITICAL: List tools WITHOUT requiring authentication (Smithery requirement)
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: this.getToolDefinitions(),
       };
     });
 
-    // Handle tool calls
+    // Handle tool calls with lazy authentication
     this.server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
       const { name, arguments: args } = request.params;
 
       try {
+        // Lazy authentication - only authenticate when tools are called, not when listed
+        if (!this.isAuthenticated && this.config?.autoLogin) {
+          await this.attemptAutoLogin();
+        }
+
         switch (name) {
-          // Authentication tools
+          // Authentication tools (no auth required for these)
           case 'tinder_login_phone':
             return await this.handleLoginPhone(args);
           case 'tinder_submit_otp':
@@ -223,7 +218,7 @@ class TinderMCPServer {
       },
       {
         name: 'tinder_login_cookies',
-        description: 'Login to Tinder using saved cookies from browser session',
+        description: 'Login to Tinder using saved cookies from browser session (fastest method)',
         inputSchema: {
           type: 'object',
           properties: {
@@ -608,28 +603,54 @@ class TinderMCPServer {
     ];
   }
 
-  // Authentication handlers
+  private async attemptAutoLogin(): Promise<void> {
+    if (!this.config) return;
+
+    try {
+      if (this.config.loginMethod === 'cookies' && this.config.tinderCookies) {
+        const result = await this.authTools.loginWithCookies(this.config.tinderCookies);
+        if (result.success) {
+          this.isAuthenticated = true;
+          console.error('✅ Auto-login successful with cookies');
+        }
+      } else if (this.config.loginMethod === 'phone' && this.config.tinderPhone) {
+        const result = await this.authTools.loginWithPhone({
+          phoneNumber: this.config.tinderPhone,
+          countryCode: this.config.tinderCountryCode || '1'
+        });
+        console.error('📱 Phone login initiated, OTP required');
+      }
+    } catch (error) {
+      console.error('❌ Auto-login failed:', error);
+    }
+  }
+
+  // Tool handlers (same as before but with config access)
   private async handleLoginPhone(args: any) {
     const validated = LoginWithPhoneSchema.parse(args);
     const result = await this.authTools.loginWithPhone(validated);
+    if (result.success) this.isAuthenticated = true;
     return this.formatToolResult(result);
   }
 
   private async handleSubmitOTP(args: any) {
     const validated = SubmitOTPSchema.parse(args);
     const result = await this.authTools.submitOTP(validated.otpCode);
+    if (result.success) this.isAuthenticated = true;
     return this.formatToolResult(result);
   }
 
   private async handleLoginAppleId(args: any) {
     const validated = LoginWithAppleIdSchema.parse(args);
     const result = await this.authTools.loginWithAppleId(validated);
+    if (result.success) this.isAuthenticated = true;
     return this.formatToolResult(result);
   }
 
   private async handleLoginCookies(args: any) {
     const validated = LoginWithCookiesSchema.parse(args);
     const result = await this.authTools.loginWithCookies(validated.cookies);
+    if (result.success) this.isAuthenticated = true;
     return this.formatToolResult(result);
   }
 
@@ -640,6 +661,7 @@ class TinderMCPServer {
 
   private async handleLogout() {
     const result = await this.authTools.logout();
+    if (result.success) this.isAuthenticated = false;
     return this.formatToolResult(result);
   }
 
@@ -748,17 +770,47 @@ class TinderMCPServer {
     };
   }
 
-  async run() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Tinder MCP server running on stdio');
+  async startHTTPServer(port = 3000) {
+    const app = express();
     
-    // Attempt auto-login if configured
-    await this.autoLogin();
+    app.use(cors());
+    app.use(express.json());
+
+    // Health check endpoint for Smithery
+    app.get('/health', (req, res) => {
+      res.json({ status: 'healthy', tools: 22, authenticated: this.isAuthenticated });
+    });
+
+    // MCP endpoint for Smithery
+    app.use('/mcp', async (req, res) => {
+      // Parse config from query parameters (Smithery format)
+      if (req.query.config) {
+        try {
+          const configData = JSON.parse(Buffer.from(req.query.config as string, 'base64').toString());
+          this.config = ConfigSchema.parse(configData);
+          
+          // Set environment variables for tool classes
+          if (this.config.headless !== undefined) process.env.HEADLESS = this.config.headless.toString();
+          if (this.config.debugMode !== undefined) process.env.DEBUG_MODE = this.config.debugMode.toString();
+          if (this.config.swipeDelay !== undefined) process.env.SWIPE_DELAY = this.config.swipeDelay.toString();
+          
+        } catch (error) {
+          console.error('Failed to parse config:', error);
+        }
+      }
+
+      const transport = new SSEServerTransport('/mcp', res);
+      await this.server.connect(transport);
+    });
+
+    app.listen(port, () => {
+      console.error(`Tinder MCP HTTP server running on port ${port}`);
+      console.error('Smithery endpoint: /mcp');
+      console.error('Health check: /health');
+    });
   }
 
   async cleanup() {
-    // Cleanup all tool instances
     await this.authTools.cleanup();
     await this.profileTools.cleanup();
     await this.discoveryTools.cleanup();
@@ -767,20 +819,22 @@ class TinderMCPServer {
   }
 }
 
+// Start HTTP server for Smithery
+const server = new TinderMCPHTTPServer();
+server.startHTTPServer(3000).catch((error) => {
+  console.error('Server error:', error);
+  process.exit(1);
+});
+
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.error('Received SIGINT, shutting down gracefully...');
+  await server.cleanup();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.error('Received SIGTERM, shutting down gracefully...');
+  await server.cleanup();
   process.exit(0);
-});
-
-// Start the server
-const server = new TinderMCPServer();
-server.run().catch((error) => {
-  console.error('Server error:', error);
-  process.exit(1);
 });
