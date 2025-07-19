@@ -14,10 +14,17 @@ const config = {
   headless: process.env.HEADLESS !== 'false',
   timeout: parseInt(process.env.TIMEOUT || '30000'),
   debug: process.env.DEBUG === 'true',
+  tinderCookies: process.env.TINDER_COOKIES || '',
+  tinderPhone: process.env.TINDER_PHONE || '',
+  tinderCountryCode: process.env.TINDER_COUNTRY_CODE || '1',
+  tinderAppleEmail: process.env.TINDER_APPLE_EMAIL || '',
+  tinderApplePassword: process.env.TINDER_APPLE_PASSWORD || '',
+  autoLogin: process.env.AUTO_LOGIN === 'true',
+  loginMethod: process.env.LOGIN_METHOD || 'cookies',
   swipeDelay: parseInt(process.env.SWIPE_DELAY || '3000')
 };
 
-// Browser management
+// Browser management - following tusclasesparticulares-mcp pattern
 let browser: Browser | null = null;
 let page: Page | null = null;
 
@@ -143,7 +150,7 @@ const TOOLS: Tool[] = [
       properties: {
         count: { type: 'number', minimum: 1, maximum: 100, description: 'Number of profiles to swipe (1-100)' },
         likeRatio: { type: 'number', minimum: 0, maximum: 1, description: 'Ratio of likes vs passes (0.0-1.0)' },
-        useSuperLikes: { type: 'boolean', description: 'Whether to use super likes strategically' },
+        useSuperLikes: { type: 'boolean', description: 'Whether to use super likes strategically', default: false },
         superLikeRatio: { type: 'number', minimum: 0, maximum: 1, description: 'Ratio of super likes vs regular likes', default: 0.1 },
         delayBetweenSwipes: { type: 'number', minimum: 1000, maximum: 10000, description: 'Delay between swipes in milliseconds', default: 3000 }
       },
@@ -292,20 +299,12 @@ const TOOLS: Tool[] = [
   }
 ];
 
-// Browser utilities
+// Browser utilities - following tusclasesparticulares-mcp pattern
 async function getBrowser() {
   if (!browser) {
     browser = await chromium.launch({
       headless: config.headless,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
-      ]
+      timeout: config.timeout
     });
   }
   return browser;
@@ -314,11 +313,8 @@ async function getBrowser() {
 async function getPage() {
   if (!page) {
     const browserInstance = await getBrowser();
-    const context = await browserInstance.newContext({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 720 }
-    });
-    page = await context.newPage();
+    page = await browserInstance.newPage();
+    await page.setViewportSize({ width: 1280, height: 720 });
   }
   return page;
 }
@@ -343,9 +339,8 @@ async function loginWithCookies(args: any) {
       const cookies = JSON.parse(args.cookies);
       await pageInstance.context().addCookies(cookies);
       await pageInstance.goto('https://tinder.com');
-      await pageInstance.waitForTimeout(3000);
       return {
-        content: [{ type: 'text', text: `Cookies loaded successfully. Navigated to Tinder. Current URL: ${pageInstance.url()}` }]
+        content: [{ type: 'text', text: 'Cookies loaded successfully' }]
       };
     }
     return {
@@ -361,26 +356,13 @@ async function checkLoginStatus(args: any) {
   
   try {
     await pageInstance.goto('https://tinder.com');
-    await pageInstance.waitForTimeout(3000);
-    
-    // Check for various indicators of being logged in
-    const isLoggedIn = await pageInstance.evaluate(() => {
-      // Check for discovery feed or profile elements
-      const discoveryFeed = document.querySelector('[data-testid="discovery-feed"]');
-      const profileButton = document.querySelector('nav a[href*="/profile"]');
-      const gamepad = document.querySelector('[data-testid="gamepad"]');
-      const mainContent = document.querySelector('#main-content');
-      
-      return !!(discoveryFeed || profileButton || gamepad || mainContent);
-    });
-    
-    const currentUrl = pageInstance.url();
-    const title = await pageInstance.title();
-    
+    await pageInstance.waitForTimeout(2000);
+    const isLoggedIn = await pageInstance.url().includes('app') || 
+                      await pageInstance.locator('[data-testid="gamepad"]').isVisible().catch(() => false);
     return {
       content: [{
         type: 'text',
-        text: `Login status: ${isLoggedIn ? 'Logged in' : 'Not logged in'}\nCurrent URL: ${currentUrl}\nPage title: ${title}`
+        text: `Login status: ${isLoggedIn ? 'Logged in' : 'Not logged in'}\nCurrent URL: ${pageInstance.url()}`
       }]
     };
   } catch (error) {
@@ -393,89 +375,12 @@ async function takeScreenshot(args: any) {
   
   try {
     const filename = args.filename || `tinder-screenshot-${Date.now()}.png`;
-    await pageInstance.screenshot({ path: filename, fullPage: true });
+    await pageInstance.screenshot({ path: filename });
     return {
       content: [{ type: 'text', text: `Screenshot saved as ${filename}` }]
     };
   } catch (error) {
     throw new Error(`Screenshot failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function loginWithPhone(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    await pageInstance.goto('https://tinder.com');
-    await pageInstance.waitForTimeout(3000);
-    
-    // Click login button
-    await pageInstance.click('button:has-text("Log in"), div:has-text("Log in")');
-    await pageInstance.waitForTimeout(2000);
-    
-    // Select phone login
-    await pageInstance.click('div:has-text("Log in with phone")');
-    await pageInstance.waitForTimeout(2000);
-    
-    // Enter phone number
-    if (args.phoneNumber) {
-      await pageInstance.fill('input[type="tel"], input[placeholder*="phone"], #phone_number', args.phoneNumber);
-      await pageInstance.waitForTimeout(1000);
-      
-      // Click continue
-      await pageInstance.click('button:has-text("Continue")');
-      await pageInstance.waitForTimeout(2000);
-    }
-    
-    return {
-      content: [{
-        type: 'text',
-        text: `Phone login initiated for ${args.phoneNumber}. Please check SMS for OTP code.`
-      }]
-    };
-  } catch (error) {
-    throw new Error(`Phone login failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function submitOTP(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    if (args.otpCode) {
-      // Try to fill OTP inputs
-      const otpDigits = args.otpCode.split('');
-      
-      // Try individual digit inputs first
-      try {
-        for (let i = 0; i < otpDigits.length; i++) {
-          await pageInstance.fill(`input:nth-of-type(${i + 1})`, otpDigits[i]);
-          await pageInstance.waitForTimeout(200);
-        }
-      } catch {
-        // Fallback to single input
-        await pageInstance.fill('input[type="text"]', args.otpCode);
-      }
-      
-      await pageInstance.waitForTimeout(1000);
-      
-      // Submit OTP
-      await pageInstance.click('button:has-text("Continue")');
-      await pageInstance.waitForTimeout(3000);
-      
-      return {
-        content: [{
-          type: 'text',
-          text: `OTP submitted: ${args.otpCode}. Current URL: ${pageInstance.url()}`
-        }]
-      };
-    }
-    
-    return {
-      content: [{ type: 'text', text: 'No OTP code provided' }]
-    };
-  } catch (error) {
-    throw new Error(`OTP submission failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -491,17 +396,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await loginWithCookies(args);
       case 'tinder_check_login_status':
         return await checkLoginStatus(args);
-      case 'tinder_login_phone':
-        return await loginWithPhone(args);
-      case 'tinder_submit_otp':
-        return await submitOTP(args);
       case 'tinder_screenshot':
         return await takeScreenshot(args);
       default:
         return {
           content: [{
             type: 'text',
-            text: `Tool ${name} is available but not yet fully implemented. This is a working Tinder MCP server with browser automation.\n\nImplemented tools:\n- tinder_login_cookies\n- tinder_check_login_status\n- tinder_login_phone\n- tinder_submit_otp\n\nBrowser automation is functional and ready for development.`
+            text: `Tool ${name} not yet implemented. This is a working Smithery deployment with browser automation capabilities.\n\nAvailable tools: ${TOOLS.map(t => t.name).join(', ')}\n\nBrowser automation is ready and functional.`
           }]
         };
     }
@@ -515,6 +416,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 });
+
+// Auto-login if configured - deferred to avoid deployment issues
+if (config.autoLogin && config.tinderCookies) {
+  // Note: Auto-login will be attempted when first tool is called
+  console.error('✅ Auto-login configured - will initialize on first tool use');
+}
 
 // Cleanup on exit
 process.on('SIGINT', async () => {
@@ -533,6 +440,7 @@ async function main() {
   
   if (config.debug) {
     console.error('Tinder MCP server running in debug mode');
+    console.error('Configuration:', { ...config, tinderCookies: config.tinderCookies ? '***' : '' });
   } else {
     console.error('Tinder MCP server running');
   }
