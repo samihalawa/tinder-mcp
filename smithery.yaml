@@ -1,60 +1,68 @@
-runtime: typescript
-configSchema:
-  type: object
-  properties:
-    tinderCookies:
-      type: string
-      title: "Tinder Session Cookies"
-      description: "JSON string of Tinder session cookies from browser DevTools for instant authentication"
-    tinderPhone:
-      type: string
-      title: "Phone Number"
-      description: "Phone number for Tinder login (optional, e.g., '680821181')"
-    tinderCountryCode:
-      type: string
-      title: "Country Code"
-      description: "Country code for phone login (e.g., '34' for Spain, '1' for US)"
-      default: "1"
-    tinderAppleEmail:
-      type: string
-      title: "Apple ID Email"
-      description: "Apple ID email for authentication (optional)"
-    tinderApplePassword:
-      type: string
-      title: "Apple ID Password"
-      description: "Apple ID password for authentication (optional)"
-    headless:
-      type: boolean
-      title: "Headless Mode"
-      description: "Run browser in headless mode"
-      default: true
-    autoLogin:
-      type: boolean
-      title: "Auto Login"
-      description: "Automatically login when server starts"
-      default: false
-    loginMethod:
-      type: string
-      title: "Login Method"
-      description: "Preferred login method for auto-authentication"
-      enum: ["cookies", "phone", "apple"]
-      default: "cookies"
-    swipeDelay:
-      type: number
-      title: "Swipe Delay"
-      description: "Default delay between swipes in milliseconds"
-      default: 3000
-      minimum: 1000
-      maximum: 10000
-    debugMode:
-      type: boolean
-      title: "Debug Mode"
-      description: "Enable debug logging and screenshots"
-      default: false
-exampleConfig:
-  tinderCookies: '[{"domain":"tinder.com","name":"AWSALBCORS","value":"V4brrUttuKuMnP3cWJ2Jr2uYygVmyOpur+k46vvWpsyyYahnnLUzo1o3HbqtmHO3NnS26sG/IxxgTXTtEq5xxubHccRFcYLzwNsJ71qDXl8LMi+GtRUZZYvHMZj3"}]'
-  headless: true
-  autoLogin: true
-  loginMethod: "cookies"
-  swipeDelay: 4000
-  debugMode: false
+version: 1
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required: []
+    properties:
+      tinderCookies:
+        type: string
+        description: "JSON string of Tinder session cookies from browser DevTools for instant authentication"
+      tinderPhone:
+        type: string
+        description: "Phone number for Tinder login (optional, e.g., '680821181')"
+      tinderCountryCode:
+        type: string
+        description: "Country code for phone login (e.g., '34' for Spain, '1' for US)"
+        default: "1"
+      tinderAppleEmail:
+        type: string
+        description: "Apple ID email for authentication (optional)"
+      tinderApplePassword:
+        type: string
+        description: "Apple ID password for authentication (optional)"
+      headless:
+        type: boolean
+        description: "Run browser in headless mode"
+        default: true
+      timeout:
+        type: number
+        description: "Default timeout in milliseconds"
+        default: 30000
+      debug:
+        type: boolean
+        description: "Enable debug logging"
+        default: false
+      autoLogin:
+        type: boolean
+        description: "Automatically login when server starts"
+        default: false
+      loginMethod:
+        type: string
+        description: "Preferred login method for auto-authentication"
+        enum: ["cookies", "phone", "apple"]
+        default: "cookies"
+      swipeDelay:
+        type: number
+        description: "Default delay between swipes in milliseconds"
+        default: 3000
+        minimum: 1000
+        maximum: 10000
+  commandFunction: |-
+    (config) => ({ 
+      command: 'node', 
+      args: ['dist/index.js'], 
+      env: { 
+        TINDER_COOKIES: config.tinderCookies || '',
+        TINDER_PHONE: config.tinderPhone || '',
+        TINDER_COUNTRY_CODE: config.tinderCountryCode || '1',
+        TINDER_APPLE_EMAIL: config.tinderAppleEmail || '',
+        TINDER_APPLE_PASSWORD: config.tinderApplePassword || '',
+        HEADLESS: config.headless ? 'true' : 'false',
+        TIMEOUT: config.timeout?.toString() || '30000',
+        DEBUG: config.debug ? 'true' : 'false',
+        AUTO_LOGIN: config.autoLogin ? 'true' : 'false',
+        LOGIN_METHOD: config.loginMethod || 'cookies',
+        SWIPE_DELAY: config.swipeDelay?.toString() || '3000'
+      } 
+    })
