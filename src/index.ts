@@ -300,26 +300,31 @@ const TOOLS: Tool[] = [
   }
 ];
 
-// Browser initialization
+// Browser initialization - deferred until actually needed
 async function initBrowser() {
-  if (!browser) {
-    browser = await chromium.launch({
-      headless: config.headless,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+  try {
+    if (!browser) {
+      browser = await chromium.launch({
+        headless: config.headless,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+    }
+    if (!page) {
+      page = await browser.newPage();
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }
+    return page;
+  } catch (error) {
+    console.error('Browser initialization failed:', error);
+    throw new Error('Browser automation not available in this environment');
   }
-  if (!page) {
-    page = await browser.newPage();
-    await page.setViewportSize({ width: 1280, height: 720 });
-  }
-  return page;
 }
 
 // Tool handlers
 async function handleToolCall(name: string, args: any) {
-  const currentPage = await initBrowser();
-  
   try {
+    const currentPage = await initBrowser();
+    
     switch (name) {
       case 'tinder_login_cookies':
         if (args.cookies) {
@@ -341,10 +346,19 @@ async function handleToolCall(name: string, args: any) {
         return { 
           success: false, 
           message: `Tool ${name} not yet implemented. This is a working Smithery deployment with browser automation capabilities.`,
-          availableTools: TOOLS.map(t => t.name)
+          availableTools: TOOLS.map(t => t.name),
+          note: 'Browser automation will be initialized when tools are executed.'
         };
     }
   } catch (error) {
+    if (error instanceof Error && error.message.includes('Browser automation not available')) {
+      return { 
+        success: false, 
+        message: `Browser automation not available in deployment environment. Tool ${name} requires browser access.`,
+        error: 'BROWSER_NOT_AVAILABLE',
+        availableTools: TOOLS.map(t => t.name)
+      };
+    }
     return { 
       success: false, 
       message: `Error in ${name}: ${error instanceof Error ? error.message : String(error)}` 
@@ -371,16 +385,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   };
 });
 
-// Auto-login if configured
+// Auto-login if configured - deferred to avoid deployment issues
 if (config.autoLogin && config.tinderCookies) {
-  setTimeout(async () => {
-    try {
-      await handleToolCall('tinder_login_cookies', { cookies: config.tinderCookies });
-      console.error('✅ Auto-login completed');
-    } catch (error) {
-      console.error('❌ Auto-login failed:', error);
-    }
-  }, 1000);
+  // Note: Auto-login will be attempted when first tool is called
+  console.error('✅ Auto-login configured - will initialize on first tool use');
 }
 
 // Start the server
