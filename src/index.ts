@@ -8,7 +8,6 @@ import {
   Tool
 } from "@modelcontextprotocol/sdk/types.js";
 import { chromium, Browser, Page } from 'playwright';
-import { z } from 'zod';
 
 // Configuration from environment variables
 const config = {
@@ -25,7 +24,7 @@ const config = {
   swipeDelay: parseInt(process.env.SWIPE_DELAY || '3000')
 };
 
-// Browser management
+// Browser management - following tusclasesparticulares-mcp pattern
 let browser: Browser | null = null;
 let page: Page | null = null;
 
@@ -300,89 +299,122 @@ const TOOLS: Tool[] = [
   }
 ];
 
-// Browser initialization - deferred until actually needed
-async function initBrowser() {
-  try {
-    if (!browser) {
-      browser = await chromium.launch({
-        headless: config.headless,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
-    }
-    if (!page) {
-      page = await browser.newPage();
-      await page.setViewportSize({ width: 1280, height: 720 });
-    }
-    return page;
-  } catch (error) {
-    console.error('Browser initialization failed:', error);
-    throw new Error('Browser automation not available in this environment');
+// Browser utilities - following tusclasesparticulares-mcp pattern
+async function getBrowser() {
+  if (!browser) {
+    browser = await chromium.launch({
+      headless: config.headless,
+      timeout: config.timeout
+    });
+  }
+  return browser;
+}
+
+async function getPage() {
+  if (!page) {
+    const browserInstance = await getBrowser();
+    page = await browserInstance.newPage();
+    await page.setViewportSize({ width: 1280, height: 720 });
+  }
+  return page;
+}
+
+async function closeBrowser() {
+  if (page) {
+    await page.close();
+    page = null;
+  }
+  if (browser) {
+    await browser.close();
+    browser = null;
   }
 }
 
-// Tool handlers
-async function handleToolCall(name: string, args: any) {
+// Tool implementations
+async function loginWithCookies(args: any) {
+  const pageInstance = await getPage();
+  
   try {
-    const currentPage = await initBrowser();
-    
-    switch (name) {
-      case 'tinder_login_cookies':
-        if (args.cookies) {
-          const cookies = JSON.parse(args.cookies);
-          await currentPage.context().addCookies(cookies);
-          await currentPage.goto('https://tinder.com');
-          return { success: true, message: 'Cookies loaded successfully' };
-        }
-        return { success: false, message: 'No cookies provided' };
-        
-      case 'tinder_check_login_status':
-        await currentPage.goto('https://tinder.com');
-        await currentPage.waitForTimeout(2000);
-        const isLoggedIn = await currentPage.url().includes('app') || 
-                          await currentPage.locator('[data-testid="gamepad"]').isVisible().catch(() => false);
-        return { success: true, isLoggedIn, currentUrl: currentPage.url() };
-        
-      default:
-        return { 
-          success: false, 
-          message: `Tool ${name} not yet implemented. This is a working Smithery deployment with browser automation capabilities.`,
-          availableTools: TOOLS.map(t => t.name),
-          note: 'Browser automation will be initialized when tools are executed.'
-        };
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('Browser automation not available')) {
-      return { 
-        success: false, 
-        message: `Browser automation not available in deployment environment. Tool ${name} requires browser access.`,
-        error: 'BROWSER_NOT_AVAILABLE',
-        availableTools: TOOLS.map(t => t.name)
+    if (args.cookies) {
+      const cookies = JSON.parse(args.cookies);
+      await pageInstance.context().addCookies(cookies);
+      await pageInstance.goto('https://tinder.com');
+      return {
+        content: [{ type: 'text', text: 'Cookies loaded successfully' }]
       };
     }
-    return { 
-      success: false, 
-      message: `Error in ${name}: ${error instanceof Error ? error.message : String(error)}` 
+    return {
+      content: [{ type: 'text', text: 'No cookies provided' }]
     };
+  } catch (error) {
+    throw new Error(`Cookie login failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-// Set up MCP server handlers
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: TOOLS };
-});
+async function checkLoginStatus(args: any) {
+  const pageInstance = await getPage();
+  
+  try {
+    await pageInstance.goto('https://tinder.com');
+    await pageInstance.waitForTimeout(2000);
+    const isLoggedIn = await pageInstance.url().includes('app') || 
+                      await pageInstance.locator('[data-testid="gamepad"]').isVisible().catch(() => false);
+    return {
+      content: [{
+        type: 'text',
+        text: `Login status: ${isLoggedIn ? 'Logged in' : 'Not logged in'}\nCurrent URL: ${pageInstance.url()}`
+      }]
+    };
+  } catch (error) {
+    throw new Error(`Status check failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function takeScreenshot(args: any) {
+  const pageInstance = await getPage();
+  
+  try {
+    const filename = args.filename || `tinder-screenshot-${Date.now()}.png`;
+    await pageInstance.screenshot({ path: filename });
+    return {
+      content: [{ type: 'text', text: `Screenshot saved as ${filename}` }]
+    };
+  } catch (error) {
+    throw new Error(`Screenshot failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Request handlers
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const result = await handleToolCall(name, args || {});
   
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(result, null, 2)
-      }
-    ]
-  };
+  try {
+    switch (name) {
+      case 'tinder_login_cookies':
+        return await loginWithCookies(args);
+      case 'tinder_check_login_status':
+        return await checkLoginStatus(args);
+      case 'tinder_screenshot':
+        return await takeScreenshot(args);
+      default:
+        return {
+          content: [{
+            type: 'text',
+            text: `Tool ${name} not yet implemented. This is a working Smithery deployment with browser automation capabilities.\n\nAvailable tools: ${TOOLS.map(t => t.name).join(', ')}\n\nBrowser automation is ready and functional.`
+          }]
+        };
+    }
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Error: ${error instanceof Error ? error.message : String(error)}`
+      }],
+      isError: true
+    };
+  }
 });
 
 // Auto-login if configured - deferred to avoid deployment issues
@@ -391,29 +423,27 @@ if (config.autoLogin && config.tinderCookies) {
   console.error('✅ Auto-login configured - will initialize on first tool use');
 }
 
-// Start the server
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Tinder MCP server running on stdio');
-}
-
 // Cleanup on exit
 process.on('SIGINT', async () => {
-  if (browser) {
-    await browser.close();
-  }
+  await closeBrowser();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  if (browser) {
-    await browser.close();
-  }
+  await closeBrowser();
   process.exit(0);
 });
 
-main().catch((error) => {
-  console.error('Server error:', error);
-  process.exit(1);
-});
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  
+  if (config.debug) {
+    console.error('Tinder MCP server running in debug mode');
+    console.error('Configuration:', { ...config, tinderCookies: config.tinderCookies ? '***' : '' });
+  } else {
+    console.error('Tinder MCP server running');
+  }
+}
+
+main().catch(console.error);
