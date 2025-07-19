@@ -7,19 +7,37 @@ import {
   ListToolsRequestSchema,
   Tool
 } from "@modelcontextprotocol/sdk/types.js";
-import { chromium, Browser, Page } from 'playwright';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
+
+// Import all tool classes
+import { AuthTools } from './tools/auth.js';
+import { ProfileTools } from './tools/profile.js';
+import { DiscoveryTools } from './tools/discovery.js';
+import { MessagingTools } from './tools/messaging.js';
+import { SettingsTools } from './tools/settings.js';
 
 // Configuration from environment variables
 const config = {
   headless: process.env.HEADLESS !== 'false',
   timeout: parseInt(process.env.TIMEOUT || '30000'),
   debug: process.env.DEBUG === 'true',
-  swipeDelay: parseInt(process.env.SWIPE_DELAY || '3000')
+  swipeDelay: parseInt(process.env.SWIPE_DELAY || '3000'),
+  autoLogin: process.env.AUTO_LOGIN === 'true',
+  loginMethod: process.env.LOGIN_METHOD || 'cookies',
+  tinderCookies: process.env.TINDER_COOKIES || '',
+  tinderPhone: process.env.TINDER_PHONE || '',
+  tinderCountryCode: process.env.TINDER_COUNTRY_CODE || '1',
 };
 
-// Browser management
-let browser: Browser | null = null;
-let page: Page | null = null;
+// Initialize tool instances
+const authTools = new AuthTools();
+const profileTools = new ProfileTools();
+const discoveryTools = new DiscoveryTools();
+const messagingTools = new MessagingTools();
+const settingsTools = new SettingsTools();
 
 const server = new Server({
   name: 'tinder-mcp',
@@ -32,6 +50,17 @@ const server = new Server({
 
 // Tool definitions
 const TOOLS: Tool[] = [
+  {
+    name: 'tinder_login_cookies',
+    description: 'Login to Tinder using saved cookies from browser session (fastest method)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cookies: { type: 'string', description: 'JSON string of cookies array from browser DevTools' }
+      },
+      required: ['cookies']
+    }
+  },
   {
     name: 'tinder_login_phone',
     description: 'Login to Tinder using phone number and OTP verification',
@@ -66,17 +95,6 @@ const TOOLS: Tool[] = [
         twoFactorCode: { type: 'string', description: '6-digit 2FA code (optional)', pattern: '^\\d{6}$' }
       },
       required: ['email', 'password']
-    }
-  },
-  {
-    name: 'tinder_login_cookies',
-    description: 'Login to Tinder using saved cookies from browser session (fastest method)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cookies: { type: 'string', description: 'JSON string of cookies array from browser DevTools' }
-      },
-      required: ['cookies']
     }
   },
   {
@@ -292,191 +310,56 @@ const TOOLS: Tool[] = [
   }
 ];
 
-// Browser utilities
-async function getBrowser() {
-  if (!browser) {
-    browser = await chromium.launch({
-      headless: config.headless,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
-      ]
-    });
-  }
-  return browser;
-}
+// Auto-login function
+async function performAutoLogin(): Promise<void> {
+  if (!config.autoLogin) return;
 
-async function getPage() {
-  if (!page) {
-    const browserInstance = await getBrowser();
-    const context = await browserInstance.newContext({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 720 }
-    });
-    page = await context.newPage();
-  }
-  return page;
-}
-
-async function closeBrowser() {
-  if (page) {
-    await page.close();
-    page = null;
-  }
-  if (browser) {
-    await browser.close();
-    browser = null;
-  }
-}
-
-// Tool implementations
-async function loginWithCookies(args: any) {
-  const pageInstance = await getPage();
-  
   try {
-    if (args.cookies) {
-      const cookies = JSON.parse(args.cookies);
-      await pageInstance.context().addCookies(cookies);
-      await pageInstance.goto('https://tinder.com');
-      await pageInstance.waitForTimeout(3000);
-      return {
-        content: [{ type: 'text', text: `Cookies loaded successfully. Navigated to Tinder. Current URL: ${pageInstance.url()}` }]
-      };
-    }
-    return {
-      content: [{ type: 'text', text: 'No cookies provided' }]
-    };
-  } catch (error) {
-    throw new Error(`Cookie login failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function checkLoginStatus(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    await pageInstance.goto('https://tinder.com');
-    await pageInstance.waitForTimeout(3000);
+    console.error('Performing auto-login...');
     
-    // Check for various indicators of being logged in
-    const isLoggedIn = await pageInstance.evaluate(() => {
-      // Check for discovery feed or profile elements
-      const discoveryFeed = document.querySelector('[data-testid="discovery-feed"]');
-      const profileButton = document.querySelector('nav a[href*="/profile"]');
-      const gamepad = document.querySelector('[data-testid="gamepad"]');
-      const mainContent = document.querySelector('#main-content');
-      
-      return !!(discoveryFeed || profileButton || gamepad || mainContent);
-    });
-    
-    const currentUrl = pageInstance.url();
-    const title = await pageInstance.title();
-    
-    return {
-      content: [{
-        type: 'text',
-        text: `Login status: ${isLoggedIn ? 'Logged in' : 'Not logged in'}\nCurrent URL: ${currentUrl}\nPage title: ${title}`
-      }]
-    };
-  } catch (error) {
-    throw new Error(`Status check failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function takeScreenshot(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    const filename = args.filename || `tinder-screenshot-${Date.now()}.png`;
-    await pageInstance.screenshot({ path: filename, fullPage: true });
-    return {
-      content: [{ type: 'text', text: `Screenshot saved as ${filename}` }]
-    };
-  } catch (error) {
-    throw new Error(`Screenshot failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function loginWithPhone(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    await pageInstance.goto('https://tinder.com');
-    await pageInstance.waitForTimeout(3000);
-    
-    // Click login button
-    await pageInstance.click('button:has-text("Log in"), div:has-text("Log in")');
-    await pageInstance.waitForTimeout(2000);
-    
-    // Select phone login
-    await pageInstance.click('div:has-text("Log in with phone")');
-    await pageInstance.waitForTimeout(2000);
-    
-    // Enter phone number
-    if (args.phoneNumber) {
-      await pageInstance.fill('input[type="tel"], input[placeholder*="phone"], #phone_number', args.phoneNumber);
-      await pageInstance.waitForTimeout(1000);
-      
-      // Click continue
-      await pageInstance.click('button:has-text("Continue")');
-      await pageInstance.waitForTimeout(2000);
-    }
-    
-    return {
-      content: [{
-        type: 'text',
-        text: `Phone login initiated for ${args.phoneNumber}. Please check SMS for OTP code.`
-      }]
-    };
-  } catch (error) {
-    throw new Error(`Phone login failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function submitOTP(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    if (args.otpCode) {
-      // Try to fill OTP inputs
-      const otpDigits = args.otpCode.split('');
-      
-      // Try individual digit inputs first
-      try {
-        for (let i = 0; i < otpDigits.length; i++) {
-          await pageInstance.fill(`input:nth-of-type(${i + 1})`, otpDigits[i]);
-          await pageInstance.waitForTimeout(200);
-        }
-      } catch {
-        // Fallback to single input
-        await pageInstance.fill('input[type="text"]', args.otpCode);
+    if (config.loginMethod === 'cookies' && config.tinderCookies) {
+      const result = await authTools.loginWithCookies(config.tinderCookies);
+      if (result.success) {
+        console.error('Auto-login with cookies successful');
+      } else {
+        console.error('Auto-login with cookies failed:', result.message);
       }
-      
-      await pageInstance.waitForTimeout(1000);
-      
-      // Submit OTP
-      await pageInstance.click('button:has-text("Continue")');
-      await pageInstance.waitForTimeout(3000);
-      
-      return {
-        content: [{
-          type: 'text',
-          text: `OTP submitted: ${args.otpCode}. Current URL: ${pageInstance.url()}`
-        }]
-      };
+    } else if (config.loginMethod === 'phone' && config.tinderPhone) {
+      const result = await authTools.loginWithPhone({
+        phoneNumber: config.tinderPhone,
+        countryCode: config.tinderCountryCode
+      });
+      if (result.success) {
+        console.error('Phone login initiated - OTP required');
+      } else {
+        console.error('Phone login failed:', result.message);
+      }
     }
-    
-    return {
-      content: [{ type: 'text', text: 'No OTP code provided' }]
-    };
   } catch (error) {
-    throw new Error(`OTP submission failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error('Auto-login error:', error);
   }
+}
+
+// Tool result formatter
+function formatToolResult(result: any) {
+  if (result.success !== undefined) {
+    return {
+      content: [{
+        type: 'text',
+        text: result.success 
+          ? `✅ ${result.message}${result.data ? '\n\nData: ' + JSON.stringify(result.data, null, 2) : ''}`
+          : `❌ ${result.message}${result.error ? '\n\nError: ' + JSON.stringify(result.error, null, 2) : ''}`
+      }],
+      isError: !result.success
+    };
+  }
+  
+  return {
+    content: [{
+      type: 'text',
+      text: typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+    }]
+  };
 }
 
 // Request handlers
@@ -486,45 +369,153 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   
   try {
+    let result;
+    
     switch (name) {
+      // Authentication tools
       case 'tinder_login_cookies':
-        return await loginWithCookies(args);
-      case 'tinder_check_login_status':
-        return await checkLoginStatus(args);
+        result = await authTools.loginWithCookies((args as any)?.cookies || '');
+        break;
       case 'tinder_login_phone':
-        return await loginWithPhone(args);
+        result = await authTools.loginWithPhone(args as any || { phoneNumber: '', countryCode: '1' });
+        break;
       case 'tinder_submit_otp':
-        return await submitOTP(args);
-      case 'tinder_screenshot':
-        return await takeScreenshot(args);
+        result = await authTools.submitOTP((args as any)?.otpCode || '');
+        break;
+      case 'tinder_login_apple_id':
+        result = await authTools.loginWithAppleId(args as any || { email: '', password: '' });
+        break;
+      case 'tinder_check_login_status':
+        result = await authTools.checkLoginStatus();
+        break;
+      case 'tinder_logout':
+        result = await authTools.logout();
+        break;
+
+      // Profile tools
+      case 'tinder_setup_profile':
+        result = await profileTools.setupProfile(args as any || {});
+        break;
+      case 'tinder_get_profile':
+        result = await profileTools.getProfile();
+        break;
+
+      // Discovery tools
+      case 'tinder_swipe':
+        result = await discoveryTools.swipe((args as any)?.action as 'like' | 'pass' | 'superlike');
+        break;
+      case 'tinder_auto_swipe':
+        const autoSwipeArgs = args as any || {};
+        result = await discoveryTools.autoSwipe({
+          count: autoSwipeArgs.count || 1,
+          likeRatio: autoSwipeArgs.likeRatio || 0.5,
+          useSuperLikes: autoSwipeArgs.useSuperLikes || false,
+          superLikeRatio: autoSwipeArgs.superLikeRatio || 0.1,
+          delayBetweenSwipes: autoSwipeArgs.delayBetweenSwipes || 3000
+        });
+        break;
+      case 'tinder_use_boost':
+        result = await discoveryTools.useBoost();
+        break;
+      case 'tinder_view_profile':
+        result = await discoveryTools.viewProfile((args as any)?.direction as 'next' | 'previous' || 'next');
+        break;
+      case 'tinder_rewind':
+        result = await discoveryTools.rewind();
+        break;
+
+      // Messaging tools
+      case 'tinder_get_matches':
+        result = await messagingTools.getMatches();
+        break;
+      case 'tinder_send_message':
+        result = await messagingTools.sendMessage((args as any)?.matchName || '', (args as any)?.message || '');
+        break;
+      case 'tinder_send_emoji':
+        result = await messagingTools.sendEmoji((args as any)?.matchName || '', (args as any)?.emoji || '');
+        break;
+      case 'tinder_share_contact':
+        result = await messagingTools.shareContact((args as any)?.matchName || '', (args as any)?.contactInfo || {});
+        break;
+      case 'tinder_get_conversation':
+        result = await messagingTools.getConversation((args as any)?.matchName || '');
+        break;
+      case 'tinder_unmatch':
+        result = await messagingTools.unmatch((args as any)?.matchName || '');
+        break;
+
+      // Settings tools
+      case 'tinder_update_settings':
+        result = await settingsTools.updateSettings(args as any || {});
+        break;
+      case 'tinder_get_settings':
+        result = await settingsTools.getSettings();
+        break;
+      case 'tinder_reset_settings':
+        result = await settingsTools.resetSettings();
+        break;
+
       default:
-        return {
-          content: [{
-            type: 'text',
-            text: `Tool ${name} is available but not yet fully implemented. This is a working Tinder MCP server with browser automation.\n\nImplemented tools:\n- tinder_login_cookies\n- tinder_check_login_status\n- tinder_login_phone\n- tinder_submit_otp\n\nBrowser automation is functional and ready for development.`
-          }]
+        result = {
+          success: false,
+          message: `Unknown tool: ${name}`,
+          error: {
+            code: 'UNKNOWN_TOOL',
+            message: `Tool '${name}' is not implemented`,
+            recoverable: false
+          }
         };
     }
+    
+    return formatToolResult(result);
   } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`
-      }],
-      isError: true
-    };
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return formatToolResult({
+      success: false,
+      message: `Error executing ${name}: ${errorMessage}`,
+      error: {
+        code: 'EXECUTION_ERROR',
+        message: errorMessage,
+        recoverable: true
+      }
+    });
   }
 });
 
+// Cleanup function
+async function cleanup() {
+  try {
+    await authTools.cleanup();
+    await profileTools.cleanup();
+    await discoveryTools.cleanup();
+    await messagingTools.cleanup();
+    await settingsTools.cleanup();
+  } catch (error) {
+    console.error('Cleanup error:', error);
+  }
+}
+
 // Cleanup on exit
 process.on('SIGINT', async () => {
-  await closeBrowser();
+  await cleanup();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  await closeBrowser();
+  await cleanup();
   process.exit(0);
+});
+
+process.on('uncaughtException', async (error) => {
+  console.error('Uncaught exception:', error);
+  await cleanup();
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+  await cleanup();
+  process.exit(1);
 });
 
 async function main() {
@@ -532,10 +523,26 @@ async function main() {
   await server.connect(transport);
   
   if (config.debug) {
-    console.error('Tinder MCP server running in debug mode');
+    console.error('🚀 Tinder MCP server running in debug mode');
+    console.error('📋 Available tools:', TOOLS.length);
+    console.error('🔧 Config:', {
+      headless: config.headless,
+      autoLogin: config.autoLogin,
+      loginMethod: config.loginMethod,
+      hasCookies: !!config.tinderCookies,
+      hasPhone: !!config.tinderPhone
+    });
   } else {
-    console.error('Tinder MCP server running');
+    console.error('🚀 Tinder MCP server running');
+  }
+
+  // Perform auto-login if configured
+  if (config.autoLogin) {
+    setTimeout(performAutoLogin, 1000); // Delay to ensure server is ready
   }
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
+});

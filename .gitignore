@@ -22,6 +22,10 @@ sessions/
 *.cookies
 *.session
 
+# Tinder-specific files
+tinder_cookies.json
+tinder-cookies*.json
+
 # Screenshots and logs
 screenshots/
 logs/
