@@ -14,7 +14,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "npm run build && npm start",
-    "test": "node scripts/test-mcp.js"
+    "test": "node scripts/test-mcp.js",
+    "setup": "./setup.sh",
+    "install-browsers": "npx playwright install chromium",
+    "lint": "echo 'No linting configured'",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.1",
@@ -36,8 +40,18 @@
     "browser-automation",
     "dating",
     "social",
-    "messaging"
+    "messaging",
+    "smithery",
+    "ai"
   ],
   "author": "Sami Halawa",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samihalawa/tinder-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/samihalawa/tinder-mcp/issues"
+  },
+  "homepage": "https://github.com/samihalawa/tinder-mcp#readme"
 }

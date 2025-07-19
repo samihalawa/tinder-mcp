@@ -13,21 +13,37 @@ export class BrowserManager {
   }
 
   async initialize(session?: TinderSession): Promise<TinderBrowserContext> {
-    // Launch browser with realistic settings
-    this.browser = await chromium.launch({
-      headless: process.env.HEADLESS !== 'false',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-      ],
-    });
+    try {
+      // Launch browser with realistic settings
+      this.browser = await chromium.launch({
+        headless: process.env.HEADLESS !== 'false',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor',
+        ],
+      });
+    } catch (error) {
+      // Enhanced error message for browser installation issues
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      if (errorMessage.includes('Executable doesn\'t exist')) {
+        throw new Error(
+          'Playwright browser not found. ' +
+          'In a local environment, run: npx playwright install chromium. ' +
+          'In Smithery.ai or containerized environments, ensure browsers are pre-installed. ' +
+          'Original error: ' + errorMessage
+        );
+      }
+      
+      throw error;
+    }
 
     // Create context with realistic user agent and viewport
     this.context = await this.browser.newContext({
