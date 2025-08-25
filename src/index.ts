@@ -9,14 +9,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { chromium, Browser, Page } from 'playwright';
 
-// Configuration from environment variables
-const config = {
-  headless: process.env.HEADLESS !== 'false',
-  timeout: parseInt(process.env.TIMEOUT || '30000'),
-  debug: process.env.DEBUG === 'true',
-  swipeDelay: parseInt(process.env.SWIPE_DELAY || '3000')
-};
-
 // Browser management
 let browser: Browser | null = null;
 let page: Page | null = null;
@@ -30,95 +22,23 @@ const server = new Server({
   }
 });
 
-// Tool definitions
+// Simplified tool definitions - only essential tools
 const TOOLS: Tool[] = [
   {
-    name: 'tinder_login_phone',
-    description: 'Login to Tinder using phone number and OTP verification',
+    name: 'tinder_login',
+    description: 'Login to Tinder with email and password',
     inputSchema: {
       type: 'object',
       properties: {
-        phoneNumber: { type: 'string', description: 'Phone number without country code (e.g., "680821181")' },
-        countryCode: { type: 'string', description: 'Country code (e.g., "34" for Spain)', default: '1' }
-      },
-      required: ['phoneNumber']
-    }
-  },
-  {
-    name: 'tinder_submit_otp',
-    description: 'Submit OTP code received via SMS for phone login',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        otpCode: { type: 'string', description: '6-digit OTP code from SMS', pattern: '^\\d{6}$' }
-      },
-      required: ['otpCode']
-    }
-  },
-  {
-    name: 'tinder_login_apple_id',
-    description: 'Login to Tinder using Apple ID (alternative authentication method)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        email: { type: 'string', description: 'Apple ID email address' },
-        password: { type: 'string', description: 'Apple ID password' },
-        twoFactorCode: { type: 'string', description: '6-digit 2FA code (optional)', pattern: '^\\d{6}$' }
+        email: { type: 'string', description: 'Your email address' },
+        password: { type: 'string', description: 'Your password' }
       },
       required: ['email', 'password']
     }
   },
   {
-    name: 'tinder_login_cookies',
-    description: 'Login to Tinder using saved cookies from browser session (fastest method)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        cookies: { type: 'string', description: 'JSON string of cookies array from browser DevTools' }
-      },
-      required: ['cookies']
-    }
-  },
-  {
-    name: 'tinder_check_login_status',
-    description: 'Check if currently logged in to Tinder',
-    inputSchema: {
-      type: 'object',
-      properties: {}
-    }
-  },
-  {
-    name: 'tinder_logout',
-    description: 'Logout from Tinder and clear session',
-    inputSchema: {
-      type: 'object',
-      properties: {}
-    }
-  },
-  {
-    name: 'tinder_setup_profile',
-    description: 'Setup or update Tinder profile with photos, bio, and personal information',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        photos: { type: 'array', items: { type: 'string' }, description: 'Array of photo file paths to upload' },
-        bio: { type: 'string', description: 'Profile bio/description (max 500 characters)', maxLength: 500 },
-        job: { type: 'string', description: 'Job title' },
-        company: { type: 'string', description: 'Company name' },
-        education: { type: 'string', description: 'Education level' },
-        school: { type: 'string', description: 'School/university name' },
-        location: { type: 'string', description: 'Location/city' },
-        interests: { type: 'array', items: { type: 'string' }, description: 'Array of interests (max 5)', maxItems: 5 },
-        languages: { type: 'array', items: { type: 'string' }, description: 'Array of languages spoken (max 3)', maxItems: 3 },
-        height: { type: 'string', description: 'Height in cm (e.g., "180")' },
-        zodiacSign: { type: 'string', description: 'Zodiac sign' },
-        relationshipType: { type: 'string', description: 'Looking for relationship type' }
-      }
-    }
-  },
-  {
-    name: 'tinder_get_profile',
-    description: 'Get current profile information and settings',
+    name: 'tinder_check_status',
+    description: 'Check if logged in',
     inputSchema: {
       type: 'object',
       properties: {}
@@ -126,59 +46,19 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'tinder_swipe',
-    description: 'Perform a manual swipe action on the current profile',
+    description: 'Swipe on profiles',
     inputSchema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['like', 'pass', 'superlike'], description: 'Swipe action to perform' }
+        action: { type: 'string', enum: ['like', 'pass'], description: 'Swipe action' },
+        count: { type: 'number', minimum: 1, maximum: 20, default: 1, description: 'Number of swipes' }
       },
       required: ['action']
     }
   },
   {
-    name: 'tinder_auto_swipe',
-    description: 'Automatically swipe through multiple profiles with strategic behavior',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        count: { type: 'number', minimum: 1, maximum: 100, description: 'Number of profiles to swipe (1-100)' },
-        likeRatio: { type: 'number', minimum: 0, maximum: 1, description: 'Ratio of likes vs passes (0.0-1.0)' },
-        useSuperLikes: { type: 'boolean', description: 'Whether to use super likes strategically' },
-        superLikeRatio: { type: 'number', minimum: 0, maximum: 1, description: 'Ratio of super likes vs regular likes', default: 0.1 },
-        delayBetweenSwipes: { type: 'number', minimum: 1000, maximum: 10000, description: 'Delay between swipes in milliseconds', default: 3000 }
-      },
-      required: ['count', 'likeRatio']
-    }
-  },
-  {
-    name: 'tinder_use_boost',
-    description: 'Activate a Tinder Boost to increase profile visibility for 30 minutes',
-    inputSchema: {
-      type: 'object',
-      properties: {}
-    }
-  },
-  {
-    name: 'tinder_view_profile',
-    description: 'Navigate through photos of the current profile being shown',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        direction: { type: 'string', enum: ['next', 'previous'], description: 'Direction to navigate photos', default: 'next' }
-      }
-    }
-  },
-  {
-    name: 'tinder_rewind',
-    description: 'Rewind the last swipe action (undo last swipe)',
-    inputSchema: {
-      type: 'object',
-      properties: {}
-    }
-  },
-  {
     name: 'tinder_get_matches',
-    description: 'Get list of current matches with basic information',
+    description: 'Get your matches',
     inputSchema: {
       type: 'object',
       properties: {}
@@ -186,108 +66,14 @@ const TOOLS: Tool[] = [
   },
   {
     name: 'tinder_send_message',
-    description: 'Send a text message to a specific match',
+    description: 'Send message to a match',
     inputSchema: {
       type: 'object',
       properties: {
-        matchName: { type: 'string', description: 'Name of the match to message (must match exactly)' },
-        message: { type: 'string', description: 'Message content to send (max 500 characters)', maxLength: 500 }
+        matchName: { type: 'string', description: 'Name of the match' },
+        message: { type: 'string', description: 'Message to send' }
       },
       required: ['matchName', 'message']
-    }
-  },
-  {
-    name: 'tinder_send_emoji',
-    description: 'Send an emoji reaction to a match',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        matchName: { type: 'string', description: 'Name of the match to send emoji to' },
-        emoji: { type: 'string', description: 'Emoji to send (e.g., "🥰", "😍", "❤️")' }
-      },
-      required: ['matchName', 'emoji']
-    }
-  },
-  {
-    name: 'tinder_share_contact',
-    description: 'Share contact information (phone/WhatsApp) with a match',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        matchName: { type: 'string', description: 'Name of the match to share contact with' },
-        contactInfo: {
-          type: 'object',
-          properties: {
-            phoneNumber: { type: 'string', description: 'Phone number to share (without country code)' },
-            countryCode: { type: 'string', description: 'Country code (e.g., "34" for Spain)' },
-            type: { type: 'string', enum: ['whatsapp', 'phone'], description: 'Type of contact to share' }
-          },
-          required: ['phoneNumber', 'countryCode', 'type']
-        }
-      },
-      required: ['matchName', 'contactInfo']
-    }
-  },
-  {
-    name: 'tinder_get_conversation',
-    description: 'Get conversation history with a specific match',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        matchName: { type: 'string', description: 'Name of the match to get conversation for' }
-      },
-      required: ['matchName']
-    }
-  },
-  {
-    name: 'tinder_unmatch',
-    description: 'Unmatch with a specific person (removes them from matches)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        matchName: { type: 'string', description: 'Name of the match to unmatch with' }
-      },
-      required: ['matchName']
-    }
-  },
-  {
-    name: 'tinder_update_settings',
-    description: 'Update Tinder discovery and preference settings',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ageRange: {
-          type: 'object',
-          properties: {
-            min: { type: 'number', minimum: 18, maximum: 100, description: 'Minimum age preference' },
-            max: { type: 'number', minimum: 18, maximum: 100, description: 'Maximum age preference' }
-          }
-        },
-        maxDistance: { type: 'number', minimum: 1, maximum: 160, description: 'Maximum distance in km' },
-        showMe: { type: 'string', enum: ['men', 'women', 'everyone'], description: 'Gender preference to show' },
-        interestedIn: { type: 'string', enum: ['men', 'women', 'everyone'], description: 'Gender you are interested in' },
-        globalMode: { type: 'boolean', description: 'Enable global/passport mode' },
-        hideAge: { type: 'boolean', description: 'Hide your age from profile' },
-        hideDistance: { type: 'boolean', description: 'Hide distance from profile' },
-        onlyShowWithPhotos: { type: 'boolean', description: 'Only show profiles with photos' },
-        recentlyActive: { type: 'boolean', description: 'Only show recently active users' }
-      }
-    }
-  },
-  {
-    name: 'tinder_get_settings',
-    description: 'Get current Tinder settings and preferences',
-    inputSchema: {
-      type: 'object',
-      properties: {}
-    }
-  },
-  {
-    name: 'tinder_reset_settings',
-    description: 'Reset all settings to default values',
-    inputSchema: {
-      type: 'object',
-      properties: {}
     }
   }
 ];
@@ -296,16 +82,8 @@ const TOOLS: Tool[] = [
 async function getBrowser() {
   if (!browser) {
     browser = await chromium.launch({
-      headless: config.headless,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu'
-      ]
+      headless: false, // Show browser for debugging
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
   }
   return browser;
@@ -323,86 +101,8 @@ async function getPage() {
   return page;
 }
 
-async function closeBrowser() {
-  if (page) {
-    await page.close();
-    page = null;
-  }
-  if (browser) {
-    await browser.close();
-    browser = null;
-  }
-}
-
-// Tool implementations
-async function loginWithCookies(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    if (args.cookies) {
-      const cookies = JSON.parse(args.cookies);
-      await pageInstance.context().addCookies(cookies);
-      await pageInstance.goto('https://tinder.com');
-      await pageInstance.waitForTimeout(3000);
-      return {
-        content: [{ type: 'text', text: `Cookies loaded successfully. Navigated to Tinder. Current URL: ${pageInstance.url()}` }]
-      };
-    }
-    return {
-      content: [{ type: 'text', text: 'No cookies provided' }]
-    };
-  } catch (error) {
-    throw new Error(`Cookie login failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function checkLoginStatus(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    await pageInstance.goto('https://tinder.com');
-    await pageInstance.waitForTimeout(3000);
-    
-    // Check for various indicators of being logged in
-    const isLoggedIn = await pageInstance.evaluate(() => {
-      // Check for discovery feed or profile elements
-      const discoveryFeed = document.querySelector('[data-testid="discovery-feed"]');
-      const profileButton = document.querySelector('nav a[href*="/profile"]');
-      const gamepad = document.querySelector('[data-testid="gamepad"]');
-      const mainContent = document.querySelector('#main-content');
-      
-      return !!(discoveryFeed || profileButton || gamepad || mainContent);
-    });
-    
-    const currentUrl = pageInstance.url();
-    const title = await pageInstance.title();
-    
-    return {
-      content: [{
-        type: 'text',
-        text: `Login status: ${isLoggedIn ? 'Logged in' : 'Not logged in'}\nCurrent URL: ${currentUrl}\nPage title: ${title}`
-      }]
-    };
-  } catch (error) {
-    throw new Error(`Status check failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function takeScreenshot(args: any) {
-  const pageInstance = await getPage();
-  
-  try {
-    const filename = args.filename || `tinder-screenshot-${Date.now()}.png`;
-    await pageInstance.screenshot({ path: filename, fullPage: true });
-    return {
-      content: [{ type: 'text', text: `Screenshot saved as ${filename}` }]
-    };
-  } catch (error) {
-    throw new Error(`Screenshot failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function loginWithPhone(args: any) {
+// Simple login implementation
+async function login(args: any) {
   const pageInstance = await getPage();
   
   try {
@@ -410,72 +110,198 @@ async function loginWithPhone(args: any) {
     await pageInstance.waitForTimeout(3000);
     
     // Click login button
-    await pageInstance.click('button:has-text("Log in"), div:has-text("Log in")');
-    await pageInstance.waitForTimeout(2000);
+    const loginButton = await pageInstance.$('button:has-text("Log in"), a:has-text("Log in")');
+    if (loginButton) {
+      await loginButton.click();
+      await pageInstance.waitForTimeout(2000);
+    }
     
-    // Select phone login
-    await pageInstance.click('div:has-text("Log in with phone")');
-    await pageInstance.waitForTimeout(2000);
+    // Look for email option
+    const emailOption = await pageInstance.$('div:has-text("Log in with email"), button:has-text("Log in with email")');
+    if (emailOption) {
+      await emailOption.click();
+      await pageInstance.waitForTimeout(2000);
+    }
     
-    // Enter phone number
-    if (args.phoneNumber) {
-      await pageInstance.fill('input[type="tel"], input[placeholder*="phone"], #phone_number', args.phoneNumber);
-      await pageInstance.waitForTimeout(1000);
+    // Fill credentials
+    await pageInstance.fill('input[type="email"], input[name="email"]', args.email);
+    await pageInstance.waitForTimeout(500);
+    await pageInstance.fill('input[type="password"], input[name="password"]', args.password);
+    await pageInstance.waitForTimeout(500);
+    
+    // Submit
+    const submitButton = await pageInstance.$('button:has-text("Log in"), button[type="submit"]');
+    if (submitButton) {
+      await submitButton.click();
+    }
+    
+    await pageInstance.waitForTimeout(5000);
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `Login attempt completed. Current URL: ${pageInstance.url()}`
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Login failed: ${error instanceof Error ? error.message : String(error)}`
+      }],
+      isError: true
+    };
+  }
+}
+
+async function checkStatus() {
+  const pageInstance = await getPage();
+  
+  try {
+    const currentUrl = pageInstance.url();
+    const isLoggedIn = currentUrl.includes('app/recs') || currentUrl.includes('app/matches');
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `Status: ${isLoggedIn ? 'Logged in' : 'Not logged in'}\nURL: ${currentUrl}`
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Status check failed: ${error instanceof Error ? error.message : String(error)}`
+      }],
+      isError: true
+    };
+  }
+}
+
+async function swipe(args: any) {
+  const pageInstance = await getPage();
+  const count = args.count || 1;
+  
+  try {
+    let results = [];
+    
+    for (let i = 0; i < count; i++) {
+      if (args.action === 'like') {
+        // Try to find and click like button
+        const likeButton = await pageInstance.$('button[aria-label*="Like"], button:has-text("Like"), [data-testid="gamepad-like"]');
+        if (likeButton) {
+          await likeButton.click();
+          results.push('Liked');
+        }
+      } else if (args.action === 'pass') {
+        // Try to find and click pass button
+        const passButton = await pageInstance.$('button[aria-label*="Nope"], button:has-text("Nope"), [data-testid="gamepad-pass"]');
+        if (passButton) {
+          await passButton.click();
+          results.push('Passed');
+        }
+      }
       
-      // Click continue
-      await pageInstance.click('button:has-text("Continue")');
       await pageInstance.waitForTimeout(2000);
     }
     
     return {
       content: [{
         type: 'text',
-        text: `Phone login initiated for ${args.phoneNumber}. Please check SMS for OTP code.`
+        text: `Swiped ${count} time(s): ${results.join(', ')}`
       }]
     };
   } catch (error) {
-    throw new Error(`Phone login failed: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      content: [{
+        type: 'text',
+        text: `Swipe failed: ${error instanceof Error ? error.message : String(error)}`
+      }],
+      isError: true
+    };
   }
 }
 
-async function submitOTP(args: any) {
+async function getMatches() {
   const pageInstance = await getPage();
   
   try {
-    if (args.otpCode) {
-      // Try to fill OTP inputs
-      const otpDigits = args.otpCode.split('');
+    // Navigate to matches
+    await pageInstance.goto('https://tinder.com/app/matches');
+    await pageInstance.waitForTimeout(3000);
+    
+    // Get match names
+    const matches = await pageInstance.$$eval('[data-testid*="match-card"], .matchListItem', elements => {
+      return elements.map(el => el.textContent || '').filter(text => text.length > 0);
+    });
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `Found ${matches.length} matches:\n${matches.join('\n')}`
+      }]
+    };
+  } catch (error) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Failed to get matches: ${error instanceof Error ? error.message : String(error)}`
+      }],
+      isError: true
+    };
+  }
+}
+
+async function sendMessage(args: any) {
+  const pageInstance = await getPage();
+  
+  try {
+    // Navigate to matches
+    await pageInstance.goto('https://tinder.com/app/matches');
+    await pageInstance.waitForTimeout(2000);
+    
+    // Find and click on match
+    const matchElement = await pageInstance.$(`text="${args.matchName}"`);
+    if (matchElement) {
+      await matchElement.click();
+      await pageInstance.waitForTimeout(2000);
       
-      // Try individual digit inputs first
-      try {
-        for (let i = 0; i < otpDigits.length; i++) {
-          await pageInstance.fill(`input:nth-of-type(${i + 1})`, otpDigits[i]);
-          await pageInstance.waitForTimeout(200);
+      // Type message
+      const messageInput = await pageInstance.$('textarea, input[placeholder*="Type a message"]');
+      if (messageInput) {
+        await messageInput.fill(args.message);
+        await pageInstance.waitForTimeout(500);
+        
+        // Send message
+        const sendButton = await pageInstance.$('button:has-text("Send"), button[type="submit"]');
+        if (sendButton) {
+          await sendButton.click();
         }
-      } catch {
-        // Fallback to single input
-        await pageInstance.fill('input[type="text"]', args.otpCode);
+        
+        return {
+          content: [{
+            type: 'text',
+            text: `Message sent to ${args.matchName}: "${args.message}"`
+          }]
+        };
       }
-      
-      await pageInstance.waitForTimeout(1000);
-      
-      // Submit OTP
-      await pageInstance.click('button:has-text("Continue")');
-      await pageInstance.waitForTimeout(3000);
-      
-      return {
-        content: [{
-          type: 'text',
-          text: `OTP submitted: ${args.otpCode}. Current URL: ${pageInstance.url()}`
-        }]
-      };
     }
     
     return {
-      content: [{ type: 'text', text: 'No OTP code provided' }]
+      content: [{
+        type: 'text',
+        text: `Could not find match: ${args.matchName}`
+      }],
+      isError: true
     };
   } catch (error) {
-    throw new Error(`OTP submission failed: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      content: [{
+        type: 'text',
+        text: `Failed to send message: ${error instanceof Error ? error.message : String(error)}`
+      }],
+      isError: true
+    };
   }
 }
 
@@ -485,57 +311,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   
-  try {
-    switch (name) {
-      case 'tinder_login_cookies':
-        return await loginWithCookies(args);
-      case 'tinder_check_login_status':
-        return await checkLoginStatus(args);
-      case 'tinder_login_phone':
-        return await loginWithPhone(args);
-      case 'tinder_submit_otp':
-        return await submitOTP(args);
-      case 'tinder_screenshot':
-        return await takeScreenshot(args);
-      default:
-        return {
-          content: [{
-            type: 'text',
-            text: `Tool ${name} is available but not yet fully implemented. This is a working Tinder MCP server with browser automation.\n\nImplemented tools:\n- tinder_login_cookies\n- tinder_check_login_status\n- tinder_login_phone\n- tinder_submit_otp\n\nBrowser automation is functional and ready for development.`
-          }]
-        };
-    }
-  } catch (error) {
-    return {
-      content: [{
-        type: 'text',
-        text: `Error: ${error instanceof Error ? error.message : String(error)}`
-      }],
-      isError: true
-    };
+  switch (name) {
+    case 'tinder_login':
+      return await login(args);
+    case 'tinder_check_status':
+      return await checkStatus();
+    case 'tinder_swipe':
+      return await swipe(args);
+    case 'tinder_get_matches':
+      return await getMatches();
+    case 'tinder_send_message':
+      return await sendMessage(args);
+    default:
+      return {
+        content: [{
+          type: 'text',
+          text: `Unknown tool: ${name}`
+        }],
+        isError: true
+      };
   }
 });
 
 // Cleanup on exit
 process.on('SIGINT', async () => {
-  await closeBrowser();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  await closeBrowser();
+  if (page) await page.close();
+  if (browser) await browser.close();
   process.exit(0);
 });
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  
-  if (config.debug) {
-    console.error('Tinder MCP server running in debug mode');
-  } else {
-    console.error('Tinder MCP server running');
-  }
+  console.error('Tinder MCP server running (simplified version)');
 }
 
 main().catch(console.error);

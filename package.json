@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Model Context Protocol server for automating Tinder operations - authentication, profile management, swiping, messaging, and settings configuration",
   "main": "dist/index.js",
+  "module": "./src/index.ts",
   "type": "module",
   "bin": {
     "tinder-mcp": "dist/index.js"
@@ -14,7 +15,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "npm run build && npm start",
-    "test": "node scripts/test-mcp.js"
+    "test": "echo \"No tests specified. Use 'npm run dev' to start MCP server.\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.1",
