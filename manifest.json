@@ -1,0 +1,31 @@
+{
+  "dxt_version": "0.1.0",
+  "name": "tinder-mcp",
+  "version": "2.0.0",
+  "description": "Automate Tinder operations including authentication, swiping, messaging, and profile management through a local MCP server",
+  "author": {
+    "name": "Sami Halawa",
+    "email": "contact@example.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/samihalawa/tinder-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samihalawa/tinder-mcp.git"
+  },
+  "icon": "icon.png",
+  "keywords": ["tinder", "automation", "dating", "mcp", "browser-automation"],
+  
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "env": {
+        "NODE_ENV": "production",
+        "DEBUG": "false"
+      }
+    }
+  }
+}
