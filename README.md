@@ -1,4 +1,5 @@
 # Tinder MCP Tool
+[![smithery badge](https://smithery.ai/badge/@samihalawa/tinder-mcp-server)](https://smithery.ai/server/@samihalawa/tinder-mcp-server)
 
 A comprehensive Model Context Protocol (MCP) tool for automating Tinder interactions. This tool provides complete functionality for authentication, profile management, swiping, messaging, and settings configuration.
 
@@ -42,6 +43,15 @@ A comprehensive Model Context Protocol (MCP) tool for automating Tinder interact
 
 ## Installation
 
+### Installing via Smithery
+
+To install Tinder API Integration Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@samihalawa/tinder-mcp-server):
+
+```bash
+npx -y @smithery/cli install @samihalawa/tinder-mcp-server --client claude
+```
+
+### Manual Installation
 1. Clone the repository:
 ```bash
 git clone https://github.com/samihalawa/tinder-mcp.git
